@@ -1,0 +1,9 @@
+The journey began in 1997 with a 1st toolkit.  The mane alternatives at
+the time were Xaw, TK, Motif, XView.  They were really bad.  GTK & Qt
+were just getting started.  Qt was still royalty based.
+
+25 years later, the alternatives are still really bad so the decision
+was made to make Guicast a standalone library.  All the video editing
+features are disabled in global_config.  A basic theme is used.
+
+
