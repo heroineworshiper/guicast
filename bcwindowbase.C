@@ -153,7 +153,7 @@ BC_WindowBase::~BC_WindowBase()
 		XFreeGC(display, gc);
 #ifdef HAVE_XFT
 // If I understand libXft sources correctly, Xft cares itself about
-// font closing durig XCloseDisplay. Removing XftFontClose fixes
+// font closing during XCloseDisplay. Removing XftFontClose fixes
 // a race between XftFontClose, XCloseDisplay and XftFontOpenXlfd.
 // 		if(largefont_xft) 
 // 			XftFontClose (display, (XftFont*)largefont_xft);
@@ -4246,15 +4246,16 @@ int BC_WindowBase::get_id()
 
 BC_Bitmap* BC_WindowBase::get_temp_bitmap(int w, int h, int color_model)
 {
+    int use_shm = 1;
     if(!temp_bitmap) temp_bitmap = new BC_Bitmap(top_level, 
 		w, 
 		h, 
 		color_model, 
-		1);
+		use_shm);
     temp_bitmap->match_params(w, 
 		h, 
 		color_model, 
-		1);
+		use_shm);
     return temp_bitmap;
 }
 
