@@ -31,12 +31,12 @@ LFLAGS += -L/usr/X11R6/lib64
 endif
 
 ifeq ($(OBJDIR), armv6l)
-BOOTSTRAPFLAGS := -DBOOTSTRAP="\"objcopy -B arm -I binary -O elf32-arm\""
+BOOTSTRAPFLAGS := -DBOOTSTRAP="\"objcopy -B arm -I binary -O elf32-littlearm\""
 LFLAGS += -L/usr/X11R6/lib64
 endif
 
 ifeq ($(OBJDIR), armv7l)
-BOOTSTRAPFLAGS := -DBOOTSTRAP="\"objcopy -B arm -I binary -O elf32-arm\""
+BOOTSTRAPFLAGS := -DBOOTSTRAP="\"objcopy -B arm -I binary -O elf32-littlearm\""
 LFLAGS += -L/usr/X11R6/lib64
 endif
 

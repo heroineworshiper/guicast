@@ -708,7 +708,7 @@ static inline void transfer_UYVA8888_to_YUVA8888(unsigned char *(*output), unsig
 
 
 
-#define VIDEO_TRANSFERS \
+#define VIDEO_TRANSFERS(output, input) \
 	switch(in_colormodel) \
 	{ \
 		case BC_YUV888: \
@@ -1323,7 +1323,7 @@ static inline void transfer_UYVA8888_to_YUVA8888(unsigned char *(*output), unsig
 
 
 #else // VIDEO_CMODELS
-#define VIDEO_TRANSFERS {}
+#define VIDEO_TRANSFERS(output, input) {}
 #endif 
 
 
@@ -1336,7 +1336,7 @@ static inline void transfer_UYVA8888_to_YUVA8888(unsigned char *(*output), unsig
 { \
 	int i, j; \
  \
-    VIDEO_TRANSFERS \
+    VIDEO_TRANSFERS(output, input) \
 	switch(in_colormodel) \
 	{ \
  		case BC_ARGB8888: \

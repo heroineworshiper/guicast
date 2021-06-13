@@ -3878,7 +3878,7 @@ int BC_WindowBase::reposition_window(int x, int y, int w, int h)
 		this->h = h;
 	}
 
-//printf("BC_WindowBase::reposition_window %d %d %d\n", translation_count, x_correction, y_correction);
+//printf("BC_WindowBase::reposition_window %d %d %d %d\n", __LINE__, translation_count, x_correction, y_correction);
 
 	if(this->w <= 0)
 		printf("BC_WindowBase::reposition_window this->w == %d\n", this->w);
@@ -3889,6 +3889,7 @@ int BC_WindowBase::reposition_window(int x, int y, int w, int h)
 	{
 // KDE shifts window right and down.
 // FVWM leaves window alone and adds border around it.
+// This still doesn't work if the window is hidden
 		XMoveResizeWindow(top_level->display, 
 			win, 
 			x + BC_DisplayInfo::left_border - BC_DisplayInfo::auto_reposition_x, 

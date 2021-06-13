@@ -86,6 +86,13 @@ VFrame::VFrame(const unsigned char *png_data)
 	read_png(png_data);
 }
 
+VFrame::VFrame(const unsigned char *png_data, int dpi)
+{
+	reset_parameters(1);
+	params = new BC_Hash;
+	read_png(png_data, dpi);
+}
+
 VFrame::VFrame(VFrame &frame)
 {
 	reset_parameters(1);

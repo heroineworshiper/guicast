@@ -363,6 +363,14 @@ public:
 	static Mutex *xft_lock;
 
 private:
+// TODO: move all the graphics from BCResources to a default BCTheme
+// composite a button out of its parts
+    VFrame** new_button(VFrame *overlay, 
+	    VFrame *up,
+	    VFrame *hi,
+	    VFrame *dn);
+
+
 // Test for availability of shared memory pixmaps
 	int init_shm(BC_WindowBase *window);
 	void init_sizes(BC_WindowBase *window);

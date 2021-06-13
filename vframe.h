@@ -73,6 +73,7 @@ public:
 		long bytes_per_line /* = -1 */);
 // Create a frame with the png image
 	VFrame(const unsigned char *png_data);
+	VFrame(const unsigned char *png_data, int dpi);
 	VFrame(VFrame &vframe);
 // Create new frame for compressed data.
 	VFrame();

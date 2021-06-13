@@ -614,7 +614,7 @@ void BC_FileBox::create_objects()
 	int x = margin, y = margin;
 	BC_Resources *resources = BC_WindowBase::get_resources();
 	int directory_title_margin = MAX(DP(20),
-		resources->filebox_text_images[0]->get_h());
+		resources->filebox_updir_images[0]->get_h());
 	
 
 // Create recent dir list
@@ -637,13 +637,15 @@ void BC_FileBox::create_objects()
 
 	add_subwindow(new BC_Title(x, y, caption));
 
-	x = get_w() - resources->filebox_icons_images[0]->get_w() - DP(10);
+//	x = get_w() - resources->filebox_icons_images[0]->get_w() - DP(10);
 
 //	add_subwindow(icon_button = new BC_FileBoxIcons(x, y, this));
 //	x -= resources->filebox_text_images[0]->get_w() + DP(5);
 
 //	add_subwindow(text_button = new BC_FileBoxText(x, y, this));
 //	x -= resources->filebox_newfolder_images[0]->get_w() + DP(5);
+
+	x = get_w() - resources->filebox_newfolder_images[0]->get_w() - DP(10);
 
 	add_subwindow(folder_button = new BC_FileBoxNewfolder(x, y, this));
 	x -= resources->filebox_delete_images[0]->get_w() + DP(5);

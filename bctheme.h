@@ -100,6 +100,8 @@ public:
 // Verify all images have been used after initialization.
 	void check_used();
 
+// composite buttons
+	static void overlay(VFrame *dst, VFrame *src, int in_x1 = -1, int in_x2 = -1, int shift = 0);
 
 
 
@@ -107,7 +109,6 @@ public:
 	BC_Resources* get_resources();
 
 private:
-	void overlay(VFrame *dst, VFrame *src, int in_x1 = -1, int in_x2 = -1, int shift = 0);
 	void init_contents();
 
 

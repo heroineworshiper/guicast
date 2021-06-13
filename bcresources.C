@@ -25,6 +25,7 @@
 #include "bcresources.h"
 #include "bcsignals.h"
 #include "bcsynchronous.h"
+#include "bctheme.h"
 #include "bcwindowbase.h"
 #include "colors.h"
 #include "bccmodels.h"
@@ -179,25 +180,6 @@ void BC_Resources::init()
 		bar_data = default_bar;
 
 
-	#include "images/cancel_up_png.h"
-	#include "images/cancel_hi_png.h"
-	#include "images/cancel_dn_png.h"
-		static VFrame* default_cancel_images[] = 
-		{
-			new VFrame(cancel_up_png),
-			new VFrame(cancel_hi_png),
-			new VFrame(cancel_dn_png)
-		};
-
-	#include "images/ok_up_png.h"
-	#include "images/ok_hi_png.h"
-	#include "images/ok_dn_png.h"
-		static VFrame* default_ok_images[] = 
-		{
-			new VFrame(ok_up_png),
-			new VFrame(ok_hi_png),
-			new VFrame(ok_dn_png)
-		};
 
 	#include "images/usethis_up_png.h"
 	#include "images/usethis_uphi_png.h"
@@ -252,12 +234,12 @@ void BC_Resources::init()
 		check = default_check_image;
 
 
-	#include "images/file_text_up_png.h"
-	#include "images/file_text_hi_png.h"
-	#include "images/file_text_dn_png.h"
-	#include "images/file_icons_up_png.h"
-	#include "images/file_icons_hi_png.h"
-	#include "images/file_icons_dn_png.h"
+// 	#include "images/file_text_up_png.h"
+// 	#include "images/file_text_hi_png.h"
+// 	#include "images/file_text_dn_png.h"
+// 	#include "images/file_icons_up_png.h"
+// 	#include "images/file_icons_hi_png.h"
+// 	#include "images/file_icons_dn_png.h"
 	#include "images/file_newfolder_up_png.h"
 	#include "images/file_newfolder_hi_png.h"
 	#include "images/file_newfolder_dn_png.h"
@@ -273,19 +255,19 @@ void BC_Resources::init()
 	#include "images/file_reload_up_png.h"
 	#include "images/file_reload_hi_png.h"
 	#include "images/file_reload_dn_png.h"
-		static VFrame* default_filebox_text_images[] = 
-		{
-			new VFrame(file_text_up_png),
-			new VFrame(file_text_hi_png),
-			new VFrame(file_text_dn_png)
-		};
-
-		static VFrame* default_filebox_icons_images[] = 
-		{
-			new VFrame(file_icons_up_png),
-			new VFrame(file_icons_hi_png),
-			new VFrame(file_icons_dn_png)
-		};
+// 		static VFrame* default_filebox_text_images[] = 
+// 		{
+// 			new VFrame(file_text_up_png),
+// 			new VFrame(file_text_hi_png),
+// 			new VFrame(file_text_dn_png)
+// 		};
+// 
+// 		static VFrame* default_filebox_icons_images[] = 
+// 		{
+// 			new VFrame(file_icons_up_png),
+// 			new VFrame(file_icons_hi_png),
+// 			new VFrame(file_icons_dn_png)
+// 		};
 
 		static VFrame* default_filebox_updir_images[] =  
 		{
@@ -323,16 +305,19 @@ void BC_Resources::init()
 			new VFrame(file_reload_dn_png)
 		};
 
-	#include "images/listbox_button_dn_png.h"
-	#include "images/listbox_button_hi_png.h"
-	#include "images/listbox_button_up_png.h"
-		static VFrame* default_listbox_button[] = 
-		{
-			new VFrame(listbox_button_up_png),
-			new VFrame(listbox_button_hi_png),
-			new VFrame(listbox_button_dn_png)
-		};
-		listbox_button = default_listbox_button;
+
+	#include "images/listbox_button_png.h"
+    #include "images/editpanel_up_png.h"
+    #include "images/editpanel_hi_png.h"
+    #include "images/editpanel_dn_png.h"
+        static VFrame *editpanel_up = new VFrame(editpanel_up_png, dpi);
+        static VFrame *editpanel_hi = new VFrame(editpanel_hi_png, dpi);
+        static VFrame *editpanel_dn = new VFrame(editpanel_dn_png, dpi);
+        listbox_button = new_button(new VFrame(listbox_button_png, dpi),
+            editpanel_up,
+            editpanel_hi,
+            editpanel_dn);
+
 
 	#include "images/menu_popup_bg_png.h"
 		static VFrame* default_listbox_bg = 0;
@@ -353,26 +338,27 @@ void BC_Resources::init()
 		};
 		listbox_expand = default_listbox_expand;
 
-	#include "images/listbox_columnup_png.h"
-	#include "images/listbox_columnhi_png.h"
-	#include "images/listbox_columndn_png.h"
+	#include "images/column_up_png.h"
+	#include "images/column_hi_png.h"
+	#include "images/column_dn_png.h"
 		static VFrame* default_listbox_column[] = 
 		{
-			new VFrame(listbox_columnup_png),
-			new VFrame(listbox_columnhi_png),
-			new VFrame(listbox_columndn_png)
+			new VFrame(column_up_png, dpi),
+			new VFrame(column_hi_png, dpi),
+			new VFrame(column_dn_png, dpi)
 		};
 		listbox_column = default_listbox_column;
+
 
 
 	#include "images/listbox_up_png.h"
 	#include "images/listbox_dn_png.h"
 		listbox_up = new VFrame(listbox_up_png);
 		listbox_dn = new VFrame(listbox_dn_png);
-		listbox_title_overlap = DP(0);
-		listbox_title_margin = DP(0);
+		listbox_title_overlap = DP(20);
+		listbox_title_margin = DP(20);
 		listbox_title_color = BLACK;
-		listbox_title_hotspot = DP(5);
+		listbox_title_hotspot = DP(20);
 
 		listbox_border1 = DKGREY;
 		listbox_border2_hi = RED;
@@ -380,7 +366,7 @@ void BC_Resources::init()
 		listbox_border3_hi = RED;
 		listbox_border3 = MEGREY;
 		listbox_border4 = WHITE;
-		listbox_selected = BLUE;
+		listbox_selected = LTGREY;
 		listbox_highlighted = LTGREY;
 		listbox_inactive = WHITE;
 		listbox_text = BLACK;
@@ -620,7 +606,7 @@ void BC_Resources::init()
 		use_shm = -1;
 
 // Initialize
-		bg_color = MEGREY;
+		bg_color = WHITE;
 		bg_shadow1 = DKGREY;
 		bg_shadow2 = BLACK;
 		bg_light1 = WHITE;
@@ -644,10 +630,24 @@ void BC_Resources::init()
 		tumble_data = default_tumbler_data;
 		tumble_duration = 150;
 
-		ok_images = default_ok_images;
-		cancel_images = default_cancel_images;
+	#include "images/ok_png.h"
+	#include "images/cancel_png.h"
+	#include "images/bigbutton_up_png.h"
+	#include "images/bigbutton_hi_png.h"
+	#include "images/bigbutton_dn_png.h"
+        static VFrame *bigbutton_up = new VFrame(bigbutton_up_png, dpi);
+        static VFrame *bigbutton_hi = new VFrame(bigbutton_hi_png, dpi);
+        static VFrame *bigbutton_dn = new VFrame(bigbutton_dn_png, dpi);
+		ok_images = new_button(new VFrame(ok_png, dpi),
+            bigbutton_up,
+            bigbutton_hi,
+            bigbutton_dn);
+		cancel_images = new_button(new VFrame(cancel_png, dpi),
+            bigbutton_up,
+            bigbutton_hi,
+            bigbutton_dn);
 		usethis_button_images = default_usethis_images;
-		filebox_descend_images = default_ok_images;
+		filebox_descend_images = ok_images;
 
 		checkbox_images = default_checkbox_images;
 		radial_images = default_radial_images;
@@ -715,7 +715,7 @@ void BC_Resources::init()
 		text_border3 = MEGREY;
 		text_border3_hi = LTPINK;
 		text_border4 = WHITE;
-		text_highlight = BLUE;
+		text_highlight = LTGREY;
 		text_inactive_highlight = MEGREY;
 
 		toggle_highlight_bg = 0;
@@ -746,13 +746,42 @@ void BC_Resources::init()
 		dirbox_columnwidth[0] = DP(200);
 		dirbox_columnwidth[1] = DP(100);
 
-		filebox_text_images = default_filebox_text_images;
-		filebox_icons_images = default_filebox_icons_images;
-		filebox_updir_images = default_filebox_updir_images;
-		filebox_newfolder_images = default_filebox_newfolder_images;
-		filebox_rename_images = default_filebox_rename_images;
-		filebox_delete_images = default_filebox_delete_images;
-		filebox_reload_images = default_filebox_reload_images;
+//		filebox_text_images = default_filebox_text_images;
+//		filebox_icons_images = default_filebox_icons_images;
+
+
+	#include "images/folder_png.h"
+	#include "images/rename_png.h"
+	#include "images/updir_png.h"
+	#include "images/delete_png.h"
+	#include "images/reload_png.h"
+	#include "images/fileboxbutton_up_png.h"
+	#include "images/fileboxbutton_hi_png.h"
+	#include "images/fileboxbutton_dn_png.h"
+        static VFrame *fileboxbutton_up = new VFrame(fileboxbutton_up_png, dpi);
+        static VFrame *fileboxbutton_hi = new VFrame(fileboxbutton_hi_png, dpi);
+        static VFrame *fileboxbutton_dn = new VFrame(fileboxbutton_dn_png, dpi);
+
+		filebox_updir_images = new_button(new VFrame(updir_png, dpi),
+            fileboxbutton_up,
+            fileboxbutton_hi,
+            fileboxbutton_dn);
+		filebox_newfolder_images = new_button(new VFrame(folder_png, dpi),
+            fileboxbutton_up,
+            fileboxbutton_hi,
+            fileboxbutton_dn);
+		filebox_rename_images = new_button(new VFrame(rename_png, dpi),
+            fileboxbutton_up,
+            fileboxbutton_hi,
+            fileboxbutton_dn);
+		filebox_delete_images = new_button(new VFrame(delete_png, dpi),
+            fileboxbutton_up,
+            fileboxbutton_hi,
+            fileboxbutton_dn);
+		filebox_reload_images = new_button(new VFrame(reload_png, dpi),
+            fileboxbutton_up,
+            fileboxbutton_hi,
+            fileboxbutton_dn);
 		directory_color = BLUE;
 		file_color = BLACK;
 
@@ -815,6 +844,22 @@ void BC_Resources::init()
 	
 		
 	}
+}
+
+
+VFrame** BC_Resources::new_button(VFrame *overlay, 
+	VFrame *up,
+	VFrame *hi,
+	VFrame *dn)
+{
+    VFrame **result = new VFrame*[3];
+    result[0] = new VFrame(*up);
+    result[1] = new VFrame(*hi);
+    result[2] = new VFrame(*dn);
+    BC_Theme::overlay(result[0], overlay, -1, -1, 0);
+    BC_Theme::overlay(result[1], overlay, -1, -1, 0);
+    BC_Theme::overlay(result[2], overlay, -1, -1, 1);
+    return result;
 }
 
 

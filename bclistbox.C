@@ -1424,13 +1424,19 @@ int BC_ListBox::get_item_highlight(ArrayList<BC_ListBoxItem*> *data,
 {
 	BC_Resources *resources = get_resources();
 	if(data[column].values[item]->selected)
-		return resources->listbox_selected;
-	else
+	{
+    	return resources->listbox_selected;
+	}
+    else
 	if(highlighted_item >= 0 &&
 		highlighted_ptr == data[master_column].values[item])
-		return resources->listbox_highlighted;
-	else
-		return resources->listbox_inactive;
+	{
+    	return resources->listbox_highlighted;
+	}
+    else
+	{
+    	return resources->listbox_inactive;
+    }
 }
 
 int BC_ListBox::get_item_color(ArrayList<BC_ListBoxItem*> *data, 
@@ -1440,9 +1446,13 @@ int BC_ListBox::get_item_color(ArrayList<BC_ListBoxItem*> *data,
 	int color = data[column].values[item]->color;
 	if(color == -1) color = get_resources()->listbox_text;
 	if(get_item_highlight(data, column, item) == color)
-		return BLACK;
-	else
-		return color;
+	{
+    	return BLACK;
+	}
+    else
+	{
+    	return color;
+    }
 }
 
 int BC_ListBox::get_from_column()
