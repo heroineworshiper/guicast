@@ -11,3 +11,11 @@ was made to make Guicast a standalone library.  All the video editing
 features are disabled in global_config.  A basic theme is used.
 
 
+There are some dependencies:
+
+    apt install xorg
+    apt install libx11-dev
+    apt install libxext-dev
+    apt install libxv-dev
+    apt install libxft-dev
+    apt install libxfixes-dev
