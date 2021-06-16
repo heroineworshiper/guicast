@@ -267,8 +267,10 @@ VFrame** BC_Theme::new_button(const char *overlay_path,
 	result->data[1] = new VFrame(*hi);
 	result->data[2] = new VFrame(*dn);
 	for(int i = 0; i < 3; i++)
-		overlay(result->data[i], &default_data, -1, -1, (i == 2));
-	return result->data;
+	{
+    	overlay(result->data[i], &default_data, -1, -1, (i == 2));
+	}
+    return result->data;
 }
 
 

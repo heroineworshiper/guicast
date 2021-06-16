@@ -106,22 +106,21 @@ BC_WindowBase::~BC_WindowBase()
 		if(top_level->active_menubar == this) top_level->active_menubar = 0;
 		if(top_level->active_popup_menu == this) top_level->active_popup_menu = 0;
 		if(top_level->active_subwindow == this) top_level->active_subwindow = 0;
-// Remove pointer from parent window to this
-		parent_window->subwindows->remove(this);
 	}
 
-	if(window_type == POPUP_WINDOW) parent_window->remove_popup(this);
+// Remove pointer from parent window to this
+    if(parent_window)
+    {
+        parent_window->remove_subwindow(this);
+    }
+
 
 // Delete the subwindows
 	is_deleting = 1;
-	if(subwindows)
+	while(subwindows.size())
 	{
-		while(subwindows->total)
-		{
 // Subwindow removes its own pointer
-			delete subwindows->values[0];
-		}
-		delete subwindows;
+		delete subwindows.get(0);
 	}
 
 	delete pixmap;
@@ -193,6 +192,15 @@ BC_WindowBase::~BC_WindowBase()
 #endif // SINGLE_THREAD
 	}
 	else
+    if(window_type == POPUP_WINDOW
+#ifdef HAVE_LIBXXF86VM
+        || window_type == VIDMODE_SCALED_WINDOW
+#endif
+        )
+    {
+        flush();
+    }
+    else
 	{
 //		flush();
 	}
@@ -239,7 +247,6 @@ int BC_WindowBase::initialize()
 	line_dashes = 0;
 	top_level = 0;
 	parent_window = 0;
-	subwindows = 0;
 	xvideo_port_id = -1;
 	video_on = 0;
 	motion_events = 0;
@@ -332,7 +339,6 @@ int BC_WindowBase::create_window(BC_WindowBase *parent_window,
 				int hide,
 				int bg_color,
 				const char *display_name,
-				int window_type,
 				BC_Pixmap *bg_pixmap,
 				int group_it)
 {
@@ -345,6 +351,8 @@ int BC_WindowBase::create_window(BC_WindowBase *parent_window,
     int vm;
 #endif
 
+
+
 	id = get_resources()->get_id();
 
 
@@ -354,7 +362,7 @@ int BC_WindowBase::create_window(BC_WindowBase *parent_window,
 
 #ifdef HAVE_LIBXXF86VM
     if(window_type == VIDMODE_SCALED_WINDOW)
-	    closest_vm(&vm,&w,&h);
+	    closest_vm(&vm, &w, &h);
 #endif
 
 	this->x = x;
@@ -362,7 +370,6 @@ int BC_WindowBase::create_window(BC_WindowBase *parent_window,
 	this->w = w;
 	this->h = h;
 	this->bg_color = bg_color;
-	this->window_type = window_type;
 	this->hidden = hide;
 	this->private_color = private_color;
 	this->parent_window = parent_window;
@@ -382,7 +389,6 @@ int BC_WindowBase::create_window(BC_WindowBase *parent_window,
 
 	if(parent_window) top_level = parent_window->top_level;
 
-	subwindows = new BC_SubWindowList;
 
 	if(window_type == MAIN_WINDOW)
 	{
@@ -596,8 +602,6 @@ int BC_WindowBase::create_window(BC_WindowBase *parent_window,
 			top_level->vis, 
 			mask, 
 			&attr);
-
-		top_level->add_popup(this);
 	}
 
 	if(window_type == SUB_WINDOW)
@@ -641,7 +645,6 @@ int BC_WindowBase::create_window(BC_WindowBase *parent_window,
 		}
 
 		if(!hidden) show_window();
-
 	}
 
 
@@ -1265,9 +1268,9 @@ if(debug) printf("BC_WindowBase::dispatch_event this=%p %d\n", this, __LINE__);
 int BC_WindowBase::dispatch_expose_event()
 {
 	int result = 0;
-	for(int i = 0; i < subwindows->total && !result; i++)
+	for(int i = 0; i < subwindows.size() && !result; i++)
 	{
-		result = subwindows->values[i]->dispatch_expose_event();
+		result = subwindows.get(i)->dispatch_expose_event();
 	}
 
 // Propagate to user
@@ -1290,9 +1293,9 @@ int BC_WindowBase::dispatch_resize_event(int w, int h)
 	}
 
 // Propagate to subwindows
-	for(int i = 0; i < subwindows->total; i++)
+	for(int i = 0; i < subwindows.size(); i++)
 	{
-		subwindows->values[i]->dispatch_resize_event(w, h);
+		subwindows.get(i)->dispatch_resize_event(w, h);
 	}
 
 // Propagate to user
@@ -1320,9 +1323,9 @@ int BC_WindowBase::dispatch_translation_event()
 		y -= y_correction;
 	}
 
-	for(int i = 0; i < subwindows->total; i++)
+	for(int i = 0; i < subwindows.size(); i++)
 	{
-		subwindows->values[i]->dispatch_translation_event();
+		subwindows.get(i)->dispatch_translation_event();
 	}
 
 	translation_event();
@@ -1375,9 +1378,9 @@ int BC_WindowBase::dispatch_motion_event()
 	}
 
 // Dispatch in stacking order
-	for(int i = subwindows->size() - 1; i >= 0 && !result; i--)
+	for(int i = subwindows.size() - 1; i >= 0 && !result; i--)
 	{
-		result = subwindows->values[i]->dispatch_motion_event();
+		result = subwindows.get(i)->dispatch_motion_event();
 	}
 
 	if(!result) result = cursor_motion_event();    // give to user
@@ -1392,9 +1395,9 @@ int BC_WindowBase::dispatch_keypress_event()
 		if(active_subwindow) result = active_subwindow->dispatch_keypress_event();
 	}
 
-	for(int i = 0; i < subwindows->total && !result; i++)
+	for(int i = 0; i < subwindows.size() && !result; i++)
 	{
-		result = subwindows->values[i]->dispatch_keypress_event();
+		result = subwindows.get(i)->dispatch_keypress_event();
 	}
 
 	if(!result) result = keypress_event();
@@ -1410,9 +1413,9 @@ int BC_WindowBase::dispatch_keyrelease_event()
 		if(active_subwindow) result = active_subwindow->dispatch_keyrelease_event();
 	}
 
-	for(int i = 0; i < subwindows->total && !result; i++)
+	for(int i = 0; i < subwindows.size() && !result; i++)
 	{
-		result = subwindows->values[i]->dispatch_keyrelease_event();
+		result = subwindows.get(i)->dispatch_keyrelease_event();
 	}
 
 	if(!result) result = keyrelease_event();
@@ -1422,9 +1425,9 @@ int BC_WindowBase::dispatch_keyrelease_event()
 
 int BC_WindowBase::dispatch_focus_in()
 {
-	for(int i = 0; i < subwindows->total; i++)
+	for(int i = 0; i < subwindows.size(); i++)
 	{
-		subwindows->values[i]->dispatch_focus_in();
+		subwindows.get(i)->dispatch_focus_in();
 	}
 
 	focus_in_event();
@@ -1434,9 +1437,9 @@ int BC_WindowBase::dispatch_focus_in()
 
 int BC_WindowBase::dispatch_focus_out()
 {
-	for(int i = 0; i < subwindows->total; i++)
+	for(int i = 0; i < subwindows.size(); i++)
 	{
-		subwindows->values[i]->dispatch_focus_out();
+		subwindows.get(i)->dispatch_focus_out();
 	}
 
 	focus_out_event();
@@ -1468,9 +1471,9 @@ int BC_WindowBase::dispatch_button_press()
 		if(active_subwindow && !result) result = active_subwindow->dispatch_button_press();
 	}
 
-	for(int i = 0; i < subwindows->total && !result; i++)
+	for(int i = 0; i < subwindows.size() && !result; i++)
 	{
-		result = subwindows->values[i]->dispatch_button_press();
+		result = subwindows.get(i)->dispatch_button_press();
 	}
 
 	if(!result) result = button_press_event();
@@ -1491,9 +1494,9 @@ int BC_WindowBase::dispatch_button_release()
 			result = dispatch_drag_stop();
 	}
 
-	for(int i = 0; i < subwindows->total && !result; i++)
+	for(int i = 0; i < subwindows.size() && !result; i++)
 	{
-		result = subwindows->values[i]->dispatch_button_release();
+		result = subwindows.get(i)->dispatch_button_release();
 	}
 
 	if(!result)
@@ -1510,9 +1513,9 @@ int BC_WindowBase::dispatch_repeat_event(int64_t duration)
 
 // all repeat event handlers get called and decide based on activity and duration
 // whether to respond
-	for(int i = 0; i < subwindows->total; i++)
+	for(int i = 0; i < subwindows.size(); i++)
 	{
-		subwindows->values[i]->dispatch_repeat_event(duration);
+		subwindows.get(i)->dispatch_repeat_event(duration);
 	}
 
 
@@ -1574,9 +1577,14 @@ int BC_WindowBase::dispatch_cursor_leave()
 {
 	unhide_cursor();
 
-	for(int i = 0; i < subwindows->total; i++)
+	for(int i = 0; i < popups.size(); i++)
 	{
-		subwindows->values[i]->dispatch_cursor_leave();
+		popups.get(i)->dispatch_cursor_leave();
+	}
+
+	for(int i = 0; i < subwindows.size(); i++)
+	{
+		subwindows.get(i)->dispatch_cursor_leave();
 	}
 
 	cursor_leave_event();
@@ -1593,9 +1601,9 @@ int BC_WindowBase::dispatch_cursor_enter()
 	if(!result && active_popup_menu) result = active_popup_menu->dispatch_cursor_enter();
 	if(!result && active_subwindow) result = active_subwindow->dispatch_cursor_enter();
 
-	for(int i = 0; !result && i < subwindows->total; i++)
+	for(int i = 0; !result && i < subwindows.size(); i++)
 	{
-		result = subwindows->values[i]->dispatch_cursor_enter();
+		result = subwindows.get(i)->dispatch_cursor_enter();
 	}
 
 	if(!result) result = cursor_enter_event();
@@ -1625,9 +1633,9 @@ int BC_WindowBase::dispatch_drag_start()
 	if(!result && active_popup_menu) result = active_popup_menu->dispatch_drag_start();
 	if(!result && active_subwindow) result = active_subwindow->dispatch_drag_start();
 	
-	for(int i = 0; i < subwindows->total && !result; i++)
+	for(int i = 0; i < subwindows.size() && !result; i++)
 	{
-		result = subwindows->values[i]->dispatch_drag_start();
+		result = subwindows.get(i)->dispatch_drag_start();
 	}
 
 	if(!result) result = is_dragging = drag_start_event();
@@ -1638,9 +1646,9 @@ int BC_WindowBase::dispatch_drag_stop()
 {
 	int result = 0;
 
-	for(int i = 0; i < subwindows->total && !result; i++)
+	for(int i = 0; i < subwindows.size() && !result; i++)
 	{
-		result = subwindows->values[i]->dispatch_drag_stop();
+		result = subwindows.get(i)->dispatch_drag_stop();
 	}
 
 	if(is_dragging && !result) 
@@ -1656,9 +1664,9 @@ int BC_WindowBase::dispatch_drag_stop()
 int BC_WindowBase::dispatch_drag_motion()
 {
 	int result = 0;
-	for(int i = 0; i < subwindows->total && !result; i++)
+	for(int i = 0; i < subwindows.size() && !result; i++)
 	{
-		result = subwindows->values[i]->dispatch_drag_motion();
+		result = subwindows.get(i)->dispatch_drag_motion();
 	}
 	
 	if(is_dragging && !result)
@@ -1701,12 +1709,11 @@ int BC_WindowBase::show_tooltip(int w, int h)
 				&x, 
 				&y, 
 				&tempwin);
-		tooltip_popup = new BC_Popup(top_level, 
-					x,
+        add_subwindow(tooltip_popup = new BC_Popup(x,
 					y,
 					w, 
 					h, 
-					get_resources()->tooltip_bg_color);
+					get_resources()->tooltip_bg_color));
 
 		draw_tooltip();
 		tooltip_popup->set_font(MEDIUMFONT);
@@ -1718,11 +1725,10 @@ int BC_WindowBase::show_tooltip(int w, int h)
 
 int BC_WindowBase::hide_tooltip()
 {
-	if(subwindows)
-		for(int i = 0; i < subwindows->total; i++)
-		{
-			subwindows->values[i]->hide_tooltip();
-		}
+	for(int i = 0; i < subwindows.size(); i++)
+	{
+		subwindows.get(i)->hide_tooltip();
+	}
 
 	if(tooltip_on)
 	{
@@ -2492,9 +2498,9 @@ void BC_WindowBase::start_hourglass_recursive()
 	if(!is_transparent)
 	{
 		set_cursor(HOURGLASS_CURSOR, 1, 0);
-		for(int i = 0; i < subwindows->total; i++)
+		for(int i = 0; i < subwindows.size(); i++)
 		{
-			subwindows->values[i]->start_hourglass_recursive();
+			subwindows.get(i)->start_hourglass_recursive();
 		}
 	}
 }
@@ -2515,9 +2521,9 @@ void BC_WindowBase::stop_hourglass_recursive()
 		if(!is_transparent)
 			set_cursor(current_cursor, 1, 0);
 
-		for(int i = 0; i < subwindows->total; i++)
+		for(int i = 0; i < subwindows.size(); i++)
 		{
-			subwindows->values[i]->stop_hourglass_recursive();
+			subwindows.get(i)->stop_hourglass_recursive();
 		}
 	}
 }
@@ -3052,9 +3058,9 @@ int BC_WindowBase::grab_port_id(BC_WindowBase *window, int color_model)
 
 int BC_WindowBase::show_window(int flush) 
 {
-	for(int i = 0; i < subwindows->size(); i++)
+	for(int i = 0; i < subwindows.size(); i++)
 	{
-		subwindows->get(i)->show_window(0);
+		subwindows.get(i)->show_window(0);
 	}
 
 	XMapWindow(top_level->display, win); 
@@ -3066,9 +3072,9 @@ int BC_WindowBase::show_window(int flush)
 
 int BC_WindowBase::hide_window(int flush) 
 { 
-	for(int i = 0; i < subwindows->size(); i++)
+	for(int i = 0; i < subwindows.size(); i++)
 	{
-		subwindows->get(i)->hide_window(0);
+		subwindows.get(i)->hide_window(0);
 	}
 
 	XUnmapWindow(top_level->display, win); 
@@ -3079,7 +3085,7 @@ int BC_WindowBase::hide_window(int flush)
 
 BC_MenuBar* BC_WindowBase::add_menubar(BC_MenuBar *menu_bar)
 {
-	subwindows->append((BC_SubWindow*)menu_bar);
+	subwindows.append((BC_SubWindow*)menu_bar);
 
 	menu_bar->parent_window = this;
 	menu_bar->top_level = this->top_level;
@@ -3087,30 +3093,58 @@ BC_MenuBar* BC_WindowBase::add_menubar(BC_MenuBar *menu_bar)
 	return menu_bar;
 }
 
-BC_WindowBase* BC_WindowBase::add_popup(BC_WindowBase *window)
-{
-//printf("BC_WindowBase::add_popup window=%p win=%p\n", window, window->win);
-	if(this != top_level) return top_level->add_popup(window);
-	popups.append(window);
-	return window;
-}
 
-void BC_WindowBase::remove_popup(BC_WindowBase *window)
+void BC_WindowBase::remove_subwindow(BC_WindowBase *window)
 {
-//printf("BC_WindowBase::remove_popup %d size=%d window=%p win=%p\n", __LINE__, popups.size(), window, window->win);
-	if(this != top_level) 
-		top_level->remove_popup(window);
-	else
-		popups.remove(window);
-//printf("BC_WindowBase::remove_popup %d size=%d window=%p win=%p\n", __LINE__, popups.size(), window, window->win);
+#ifdef HAVE_LIBXXF86VM
+    if(window->window_type == POPUP_WINDOW || window->window_type == VIDMODE_SCALED_WINDOW)
+#else
+    if(window->window_type == POPUP_WINDOW)
+#endif
+    {
+	    if(top_level && 
+            this != top_level) 
+		{
+            top_level->remove_subwindow(window);
+	    }
+        else
+		{
+            popups.remove(window);
+        }
+    }
+    else
+    if(window->window_type == SUB_WINDOW)
+    {
+		subwindows.remove(window);
+    }
 }
-
 
 BC_WindowBase* BC_WindowBase::add_subwindow(BC_WindowBase *subwindow)
 {
-	subwindows->append(subwindow);
+//printf("BC_WindowBase::add_subwindow %d this=%p window_type=%d\n", __LINE__, this, window_type);
+#ifdef HAVE_LIBXXF86VM
+    if(subwindow->window_type == POPUP_WINDOW || subwindow->window_type == VIDMODE_SCALED_WINDOW)
+#else
+    if(subwindow->window_type == POPUP_WINDOW)
+#endif
+    {
+        if(top_level && this != top_level)
+        {
+            return top_level->add_subwindow(subwindow);
+        }
 
-	if(subwindow->bg_color == -1) subwindow->bg_color = this->bg_color;
+	    popups.append(subwindow);
+    }
+    else
+    if(subwindow->window_type == SUB_WINDOW)
+    {
+    	subwindows.append(subwindow);
+    }
+
+	if(subwindow->bg_color == -1)
+    {
+        subwindow->bg_color = this->bg_color;
+    }
 
 // parent window must be set before the subwindow initialization
 	subwindow->parent_window = this;
@@ -3470,9 +3504,9 @@ int BC_WindowBase::cycle_textboxes(int amount)
 int BC_WindowBase::find_next_textbox(BC_WindowBase **first_textbox, BC_WindowBase **next_textbox, int &result)
 {
 // Search subwindows for textbox
-	for(int i = 0; i < subwindows->total && result < 2; i++)
+	for(int i = 0; i < subwindows.size() && result < 2; i++)
 	{
-		BC_WindowBase *test_subwindow = subwindows->values[i];
+		BC_WindowBase *test_subwindow = subwindows.get(i);
 		test_subwindow->find_next_textbox(first_textbox, next_textbox, result);
 	}
 
@@ -3519,9 +3553,9 @@ int BC_WindowBase::find_prev_textbox(BC_WindowBase **last_textbox, BC_WindowBase
 	}
 
 // Search subwindows for textbox
-	for(int i = subwindows->total - 1; i >= 0 && result < 2; i--)
+	for(int i = subwindows.size() - 1; i >= 0 && result < 2; i--)
 	{
-		BC_WindowBase *test_subwindow = subwindows->values[i];
+		BC_WindowBase *test_subwindow = subwindows.get(i);
 		test_subwindow->find_prev_textbox(last_textbox, prev_textbox, result);
 	}
 	return 0;
@@ -3636,9 +3670,9 @@ int BC_WindowBase::match_window(Window win)
 {
 	if (this->win == win) return 1;
 	int result = 0;
-	for(int i = 0; i < subwindows->total; i++)
+	for(int i = 0; i < subwindows.size(); i++)
 	{
-		result = subwindows->values[i]->match_window(win);
+		result = subwindows.get(i)->match_window(win);
 		if (result) return result;
 	}
 	return 0;
@@ -3722,16 +3756,27 @@ int BC_WindowBase::get_cursor_y()
 	return top_level->cursor_y;
 }
 
-int BC_WindowBase::dump_windows()
+int BC_WindowBase::dump_windows(int indent)
 {
-	printf("\tBC_WindowBase::dump_windows window=%p win=%p\n", this, (void*)this->win);
-	for(int i = 0; i < subwindows->size(); i++)
+    for(int i = 0; i < indent; i++)
+    {
+        printf("    ");
+    }
+	printf("BC_WindowBase::dump_windows this=%p type=%d x,y=%dx%d w,h=%dx%d\n", 
+        this, 
+        window_type,
+        get_x(),
+        get_y(),
+        get_w(),
+        get_h());
+
+	for(int i = 0; i < subwindows.size(); i++)
 	{
-    	subwindows->get(i)->dump_windows();
+    	subwindows.get(i)->dump_windows(indent + 1);
 	}
     for(int i = 0; i < popups.size(); i++)
 	{
-    	printf("\tBC_WindowBase::dump_windows popup=%p win=%p\n", popups.get(i), (void*)popups.get(i)->win);
+    	popups.get(i)->dump_windows(indent + 1);
     }
     return 0;
 }
@@ -3739,6 +3784,24 @@ int BC_WindowBase::dump_windows()
 int BC_WindowBase::is_event_win()
 {
 	return this->win == top_level->event_win;
+}
+
+int BC_WindowBase::is_event_subwin()
+{
+    if(this->win == top_level->event_win)
+    {
+        return 1;
+    }
+    
+    for(int i = 0; i < subwindows.size(); i++)
+    {
+        if(subwindows.get(i)->is_event_subwin())
+        {
+            return 1;
+        }
+    }
+    
+    return 0;
 }
 
 void BC_WindowBase::set_dragging(int value)
@@ -3828,9 +3891,9 @@ int BC_WindowBase::resize_window(int w, int h)
 	pixmap = new BC_Pixmap(this, w, h);
 
 // Propagate to menubar
-	for(int i = 0; i < subwindows->total; i++)
+	for(int i = 0; i < subwindows.size(); i++)
 	{
-		subwindows->values[i]->dispatch_resize_event(w, h);
+		subwindows.get(i)->dispatch_resize_event(w, h);
 	}
 
 	draw_background(0, 0, w, h);
@@ -3912,9 +3975,9 @@ int BC_WindowBase::reposition_window(int x, int y, int w, int h)
 		delete pixmap;
 		pixmap = new BC_Pixmap(this, this->w, this->h);
 // Propagate to menubar
-		for(int i = 0; i < subwindows->total; i++)
+		for(int i = 0; i < subwindows.size(); i++)
 		{
-			subwindows->values[i]->dispatch_resize_event(this->w, this->h);
+			subwindows.get(i)->dispatch_resize_event(this->w, this->h);
 		}
 
 //		draw_background(0, 0, w, h);
@@ -3977,14 +4040,14 @@ int BC_WindowBase::set_icon(VFrame *data)
 		PIXMAP_ALPHA,
 		1);
 
-	icon_window = new BC_Popup(this, 
+    add_subwindow(icon_window = new BC_Popup(
 		(int)BC_INFINITY, 
 		(int)BC_INFINITY, 
 		icon_pixmap->get_w(), 
 		icon_pixmap->get_h(), 
 		-1, 
 		1, // All windows are hidden initially
-		icon_pixmap);
+		icon_pixmap));
 
 	XWMHints wm_hints;
 	wm_hints.flags = WindowGroupHint | IconPixmapHint | IconMaskHint | IconWindowHint;

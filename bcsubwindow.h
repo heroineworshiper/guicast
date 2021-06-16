@@ -35,17 +35,6 @@ public:
 private:
 };
 
-class BC_SubWindowList : public ArrayList<BC_WindowBase*>
-{
-public:
-	BC_SubWindowList();
-	~BC_SubWindowList();
-
-
-private:
-	
-};
-
 
 
 #endif

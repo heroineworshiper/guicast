@@ -464,6 +464,7 @@ public:
     void disable();
     void enable();
     int get_enabled();
+    void set_tooltip(const char *text);
 
 	friend class BC_TumbleTextBoxText;
 	friend class BC_TumbleTextBoxTumble;
@@ -478,6 +479,7 @@ private:
 	BC_TumbleTextBoxText *textbox;
 	BC_Tumbler *tumbler;
 	BC_WindowBase *parent_window;
+    string tooltip_text;
 };
 
 class BC_TumbleTextBoxText : public BC_TextBox

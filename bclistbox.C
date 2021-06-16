@@ -3797,26 +3797,17 @@ int BC_ListBox::drag_start_event()
 					
 					if (item_return->icon_vframe)
 					{
-						drag_popup = new BC_DragWindow(this, 
-							item_return->icon_vframe /*, 
-							get_abs_cursor_x(0) - item_return->icon_vframe->get_w() / 2,
-							get_abs_cursor_y(0) - item_return->icon_vframe->get_h() / 2 */);
+						add_subwindow(drag_popup = new BC_DragWindow(item_return->icon_vframe));
 					}
 					else	
 // this probably works not!
 					if (item_return->icon)  
 					{
-						drag_popup = new BC_DragWindow(this, 
-							item_return->icon /*, 
-							get_abs_cursor_x(0) - item_return->icon->get_w() / 2,
-							get_abs_cursor_y(0) - item_return->icon->get_h() / 2 */);
+						add_subwindow(drag_popup = new BC_DragWindow(item_return->icon));
 					}
 					else
 					{
-						drag_popup = new BC_DragWindow(this, 
-							drag_icon_vframe /*, 
-							get_abs_cursor_x(0) - drag_icon_vframe->get_w() / 2,
-							get_abs_cursor_y(0) - drag_icon_vframe->get_h() / 2 */);
+						add_subwindow(drag_popup = new BC_DragWindow(drag_icon_vframe));
 					}
 					
 					current_operation = DRAG_ITEM;
@@ -3828,10 +3819,7 @@ int BC_ListBox::drag_start_event()
 		case COLUMN_DN:
 			if(gui && gui->is_event_win() && allow_drag_column)
 			{
-				drag_popup = new BC_DragWindow(this, 
-					drag_column_icon_vframe /*, 
-					get_abs_cursor_x(0) - drag_column_icon_vframe->get_w() / 2,
-					get_abs_cursor_y(0) - drag_column_icon_vframe->get_h() / 2 */);
+				add_subwindow(drag_popup = new BC_DragWindow(drag_column_icon_vframe));
 				dragged_title = highlighted_title;
 				current_operation = COLUMN_DRAG;
 				draw_titles(1);
@@ -4115,8 +4103,7 @@ int BC_ListBox::activate(int take_focus)
 			if(new_y + popup_h > top_level->get_root_h(0)) 
 				new_y -= get_h() + popup_h;
 
-			add_subwindow(gui = new BC_Popup(this, 
-				new_x, 
+			add_subwindow(gui = new BC_Popup(new_x, 
 				new_y, 
 				popup_w, 
 				popup_h, 

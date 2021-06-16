@@ -233,12 +233,9 @@ public:
 	int get_window_lock();
 
 	BC_MenuBar* add_menubar(BC_MenuBar *menu_bar);
+// was add_popup
 	BC_WindowBase* add_subwindow(BC_WindowBase *subwindow);
 	BC_WindowBase* add_tool(BC_WindowBase *subwindow);
-// Use this to get events for the popup window.
-// Events are not propagated to the popup window.
-	BC_WindowBase* add_popup(BC_WindowBase *window);
-	void remove_popup(BC_WindowBase *window);
 
 	static BC_Resources* get_resources();
 // User must create synchronous object first
@@ -308,6 +305,8 @@ public:
 	BC_WindowBase* get_parent();
 // Event happened in this window
 	int is_event_win();
+// Event happened in this or a subwindow, except a popup
+    int is_event_subwin();
 	int cursor_inside();
 // Deactivate everything and activate this subwindow
 	virtual int activate();
@@ -574,6 +573,7 @@ public:
 
     BC_Bitmap* get_temp_bitmap(int w, int h, int color_model);
 	
+	int dump_windows(int indent);
 	int test_keypress;
   	char keys_return[KEYPRESSLEN];
 
@@ -593,7 +593,6 @@ private:
 				int hide,
 				int bg_color,
 				const char *display_name,
-				int window_type,
 				BC_Pixmap *bg_pixmap,
 				int group_it);
 
@@ -606,7 +605,8 @@ private:
 	void init_cursors();
 	int init_colors();
 	int init_window_shape();
-
+// was remove_popup
+    void remove_subwindow(BC_WindowBase *subwindow);
 
 
 	XFontStruct* query_font(const char *font_string, int size);
@@ -694,7 +694,7 @@ private:
 // Window just above this window
 	BC_WindowBase* parent_window;
 // list of window bases in this window
-	BC_SubWindowList* subwindows;
+	ArrayList<BC_WindowBase*> subwindows;
 	ArrayList<BC_WindowBase*> popups;
 // Position of window
 	int x, y, w, h;
@@ -902,7 +902,6 @@ private:
 // Lock that waits until the event handler is running
 	Condition *init_lock;
 
-	int dump_windows();
 
 
 	BC_WindowEvents *event_thread;
