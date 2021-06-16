@@ -19,3 +19,8 @@ There are some dependencies:
     apt install libxv-dev
     apt install libxft-dev
     apt install libxfixes-dev
+
+Compiling it requires make.  It uses global_config in the current
+directory or global_config 1 directory higher if it exists.  This allows
+the video editing features to be compiled without changing anything.
+
