@@ -4308,6 +4308,11 @@ int BC_WindowBase::get_id()
 	return id;
 }
 
+Window BC_WindowBase::get_win()
+{
+    return win;
+}
+
 BC_Bitmap* BC_WindowBase::get_temp_bitmap(int w, int h, int color_model)
 {
     int use_shm = 1;

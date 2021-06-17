@@ -349,6 +349,7 @@ public:
 	void clear_box(int x, int y, int w, int h, BC_Pixmap *pixmap = 0);
 	void draw_box(int x, int y, int w, int h, BC_Pixmap *pixmap = 0);
 	void draw_circle(int x, int y, int w, int h, BC_Pixmap *pixmap = 0);
+	void draw_fg_circle(int x, int y, int w, int h);
 	void draw_arc(int x, 
 		int y, 
 		int w, 
@@ -357,6 +358,7 @@ public:
 		int angle_length,
 		BC_Pixmap *pixmap = 0);
 	void draw_disc(int x, int y, int w, int h, BC_Pixmap *pixmap = 0);
+	void draw_fg_disc(int x, int y, int w, int h);
 	void draw_text(int x, int y, const char *text, int length = -1, BC_Pixmap *pixmap = 0);
 	void draw_xft_text(int x, 
 		int y, 
@@ -372,6 +374,7 @@ public:
 	void truncate_text(char *result, const char *text, int w);
 	void draw_center_text(int x, int y, const char *text, int length = -1);
 	void draw_line(int x1, int y1, int x2, int y2, BC_Pixmap *pixmap = 0);
+	void draw_fg_line(int x1, int y1, int x2, int y2);
 	void draw_polygon(ArrayList<int> *x, ArrayList<int> *y, BC_Pixmap *pixmap = 0);
 	void fill_polygon(ArrayList<int> *x, ArrayList<int> *y, BC_Pixmap *pixmap = 0);
 	void draw_rectangle(int x, int y, int w, int h);
@@ -506,6 +509,7 @@ public:
 		int src_h = 0,
 		BC_Pixmap *pixmap = 0);
 	void draw_pixel(int x, int y, BC_Pixmap *pixmap = 0);
+	void draw_fg_pixel(int x, int y);
 // Draw a pixmap on the window
 	void draw_pixmap(BC_Pixmap *pixmap, 
 		int dest_x = 0, 
@@ -572,6 +576,8 @@ public:
 #endif
 
     BC_Bitmap* get_temp_bitmap(int w, int h, int color_model);
+// get the foreground window for drawing
+    Window get_win();
 	
 	int dump_windows(int indent);
 	int test_keypress;
