@@ -202,6 +202,7 @@ VFrame** BC_Theme::get_image_set(const char *title, int use_default)
 	}
 
 // Give up and go to a movie
+    printf("BC_Theme::get_image_set %d %s not found\n", __LINE__, title);
 	return 0;
 }
 
