@@ -348,6 +348,7 @@ public:
 	void copy_area(int x1, int y1, int x2, int y2, int w, int h, BC_Pixmap *pixmap = 0);
 	void clear_box(int x, int y, int w, int h, BC_Pixmap *pixmap = 0);
 	void draw_box(int x, int y, int w, int h, BC_Pixmap *pixmap = 0);
+	void draw_fg_box(int x, int y, int w, int h);
 	void draw_circle(int x, int y, int w, int h, BC_Pixmap *pixmap = 0);
 	void draw_fg_circle(int x, int y, int w, int h);
 	void draw_arc(int x, 

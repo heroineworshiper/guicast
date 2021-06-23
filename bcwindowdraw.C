@@ -62,6 +62,17 @@ void BC_WindowBase::draw_box(int x, int y, int w, int h, BC_Pixmap *pixmap)
 		h);
 }
 
+void BC_WindowBase::draw_fg_box(int x, int y, int w, int h)
+{
+	XFillRectangle(top_level->display, 
+		win, 
+		top_level->gc, 
+		x, 
+		y, 
+		w, 
+		h);
+}
+
 
 void BC_WindowBase::draw_circle(int x, int y, int w, int h, BC_Pixmap *pixmap)
 {
