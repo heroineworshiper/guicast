@@ -254,6 +254,7 @@ int BC_WindowBase::initialize()
 	translation_events = 0;
 	ctrl_mask = shift_mask = alt_mask = 0;
 	cursor_x = cursor_y = button_number = 0;
+    reject_win = -1;
 	button_down = 0;
 	button_pressed = 0;
 	button_time1 = 0;
@@ -819,15 +820,21 @@ int BC_WindowBase::dispatch_event(XEvent *event)
         lock_window("BC_WindowBase::dispatch_event 1");
 	}
 	else
-// Handle compressed events
+// Handle compressed events out of order
 	{
 		lock_window("BC_WindowBase::dispatch_event 2");
 		if(resize_events)
-			dispatch_resize_event(last_resize_w, last_resize_h);
-		if(motion_events)
-			dispatch_motion_event();
-		if(translation_events)
-			dispatch_translation_event();
+		{
+        	dispatch_resize_event(last_resize_w, last_resize_h);
+		}
+        if(motion_events)
+		{
+        	dispatch_motion_event();
+		}
+        if(translation_events)
+		{
+        	dispatch_translation_event();
+        }
 
 		unlock_window();
 		return 0;
@@ -972,17 +979,30 @@ __LINE__, title, event);
 
 		case MotionNotify:
 			get_key_masks(event);
+
+// reject the event
+            if(event->xmotion.x == reject_x &&
+                event->xmotion.y == reject_y &&
+                event->xany.window == reject_win)
+            {
+                reject_win = -1;
+                
+            }
+            else
+            {
+
 // Dispatch previous motion event if this is a subsequent motion from a different window
-			if(motion_events && last_motion_win != event->xany.window)
-			{
-				dispatch_motion_event();
-			}
+			    if(motion_events && last_motion_win != event->xany.window)
+			    {
+				    dispatch_motion_event();
+			    }
 
 // Buffer the current motion
-			motion_events = 1;
-			last_motion_x = event->xmotion.x;
-			last_motion_y = event->xmotion.y;
-			last_motion_win = event->xany.window;
+			    motion_events = 1;
+			    last_motion_x = event->xmotion.x;
+			    last_motion_y = event->xmotion.y;
+			    last_motion_win = event->xany.window;
+            }
 			break;
 
 		case ConfigureNotify:
@@ -2474,6 +2494,24 @@ int BC_WindowBase::get_cursor()
 {
 	return current_cursor;
 }
+
+void BC_WindowBase::reposition_cursor(int x, int y)
+{
+    XWarpPointer(
+        top_level->display,
+        None,
+        win,
+        0,
+        0,
+        0,
+        0,
+        x,
+        y);
+    reject_x = x;
+    reject_y = y;
+    reject_win = win;
+}
+
 
 void BC_WindowBase::start_hourglass()
 {

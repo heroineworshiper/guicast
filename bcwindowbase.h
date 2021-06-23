@@ -324,6 +324,8 @@ public:
 	void set_line_dashes(int value);
 	int get_bgcolor();
 	void set_font(int font);
+// reposition the cursor
+    void reposition_cursor(int x, int y);
 // Set the cursor to a macro from cursors.h
 // Set override if the caller is enabling hourglass or hiding the cursor
 	void set_cursor(int cursor, int override /* = 0 */, int flush);
@@ -748,6 +750,9 @@ private:
 	int ctrl_mask, shift_mask, alt_mask;
 // Cursor motion information
 	int cursor_x, cursor_y;
+// reject cursor motion event caused by repositon_cursor
+    Window reject_win;
+    int reject_x, reject_y;
 // Button status information
 	int button_down, button_number;
 // When button was pressed and whether it qualifies as a double click
