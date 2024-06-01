@@ -1,4 +1,3 @@
-
 /*
  * CINELERRA
  * Copyright (C) 2008 Adam Williams <broadcast at earthling dot net>
@@ -93,7 +92,7 @@ void BC_WindowEvents::run()
 // HACK: delay is required to get the close event
 			usleep(1);
 //if(window && event)
-//printf("BC_WindowEvents::run %d %s %d\n", __LINE__, window->title, event->type);
+//printf("BC_WindowEvents::run %d %s %d\n", __LINE__, window->title, ((XClientMessageEvent*)event)->message_type);
 			window->put_event(event);
 		}
 		XUnlockDisplay(window->display);
@@ -101,6 +100,13 @@ void BC_WindowEvents::run()
 #endif
 
 	}
+
+// flush the extra SetDoneXAtom
+    while(XPending(window->display))
+    {
+        XEvent temp;
+        XNextEvent(window->display, &temp);
+    }
 }
 
 

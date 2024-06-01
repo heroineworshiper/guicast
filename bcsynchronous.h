@@ -1,4 +1,3 @@
-
 /*
  * CINELERRA
  * Copyright (C) 2008 Adam Williams <broadcast at earthling dot net>
@@ -165,6 +164,7 @@ public:
 	void create_objects();
 	void start();
 	void run();
+    int running();
 
 	virtual BC_SynchronousCommand* new_command();
 // Handle extra commands not part of the base class.
@@ -213,6 +213,9 @@ public:
 		GLXContext *gl_context);
 // Release a pbuffer for use by get_pbuffer.
 	void release_pbuffer(int window_id, GLXPbuffer pbuffer);
+// delete unused objects in the current window
+    void delete_pbuffers();
+    void delete_textures();
 
 // Schedule GL pixmap for deletion by the garbage collector.
 // Pixmaps don't wait until until the window is deleted but they must be

@@ -1,4 +1,3 @@
-
 /*
  * CINELERRA
  * Copyright (C) 1997-2018 Adam Williams <broadcast at earthling dot net>
@@ -62,6 +61,63 @@ void BC_WindowBase::draw_box(int x, int y, int w, int h, BC_Pixmap *pixmap)
 		h);
 }
 
+void BC_WindowBase::draw_box_alpha(int x, 
+        int y, 
+        int w, 
+        int h, 
+        int a, 
+        int checker_w,
+        int checker_h,
+        BC_Pixmap *pixmap)
+{
+    int r = (top_level->current_color & 0xff0000) >> 16;
+    int g = (top_level->current_color & 0xff00) >> 8;
+    int b = (top_level->current_color & 0xff);
+// bits from cmodel_transfer_alpha
+    int light = (int)(.6 * 255);
+    int dark = (int)(.4 * 255);
+    int anti_a = 255 - a;
+
+    for(int i = 0; i < h; i += checker_h)
+    {
+        int color1 = (i / checker_h) % 2;
+        for(int j = 0; j < w; j += checker_w)
+        {
+            int color2 = (color1 + j / checker_w) % 2;
+            int bg_r, bg_g, bg_b;
+            if(color2)
+            {
+                bg_r = bg_g = bg_b = light;
+            }
+            else
+            {
+                bg_r = bg_g = bg_b = dark;
+            }
+            
+	        int r2 = ((int)r * a + bg_r * anti_a) / 255;
+	        int g2 = ((int)g * a + bg_g * anti_a) / 255;
+	        int b2 = ((int)b * a + bg_b * anti_a) / 255;
+            int check_w = checker_w;
+            int check_h = checker_h;
+            if(w - j < check_w) check_w = w - j;
+            if(h - i < check_h) check_h = h - i;
+            
+            XSetForeground(top_level->display, 
+		        top_level->gc, 
+		        (r2 << 16) | (g2 << 8) | (b2));
+            XFillRectangle(top_level->display, 
+	            pixmap ? pixmap->opaque_pixmap : this->pixmap->opaque_pixmap, 
+	            top_level->gc, 
+	            x + j, 
+	            y + i, 
+	            check_w, 
+	            check_h);
+        }
+    }
+//printf("BC_WindowBase::draw_box_alpha %d a=%d\n", __LINE__, a);
+
+    set_color(top_level->current_color);
+}
 
 void BC_WindowBase::draw_circle(int x, int y, int w, int h, BC_Pixmap *pixmap)
 {
@@ -483,13 +539,28 @@ void BC_WindowBase::fill_polygon(ArrayList<int> *x, ArrayList<int> *y, BC_Pixmap
 
 void BC_WindowBase::draw_rectangle(int x, int y, int w, int h)
 {
-	XDrawRectangle(top_level->display, 
-		pixmap->opaque_pixmap, 
-		top_level->gc, 
-		x, 
-		y, 
-		w - 1, 
-		h - 1);
+// This doesn't draw properly with XOR
+// 	XDrawRectangle(top_level->display, 
+// 		pixmap->opaque_pixmap, 
+// 		top_level->gc, 
+// 		x, 
+// 		y, 
+// 		w - 1, 
+// 		h - 1);
+
+    ArrayList<int> x_points;
+    ArrayList<int> y_points;
+    x_points.append(x);
+    x_points.append(x + w - 1);
+    x_points.append(x + w - 1);
+    x_points.append(x);
+    x_points.append(x);
+    y_points.append(y);
+    y_points.append(y);
+    y_points.append(y + h - 1);
+    y_points.append(y + h - 1);
+    y_points.append(y);
+    draw_polygon(&x_points, &y_points, 0);
 }
 
 void BC_WindowBase::draw_3d_border(int x, 

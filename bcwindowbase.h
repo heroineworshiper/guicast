@@ -1,7 +1,6 @@
-
 /*
  * CINELERRA
- * Copyright (C) 1997-2014 Adam Williams <broadcast at earthling dot net>
+ * Copyright (C) 1997-2024 Adam Williams <broadcast at earthling dot net>
  * 
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -43,7 +42,7 @@
 #include "bcbutton.inc"
 #include "bccapture.inc"
 #include "bcclipboard.inc"
-#include "bccmodels.inc"
+//#include "bccmodels.inc"
 #include "bcdisplay.inc"
 #include "bcdragwindow.inc"
 #include "bcfilebox.inc"
@@ -113,6 +112,17 @@ public:
 };
 
 
+// wrapper for x events & user functions to run in the window thread
+class BC_Event
+{
+public:
+    BC_Event();
+    virtual ~BC_Event();
+    XEvent *xevent;
+    void (*user_function)(void *);
+    void *user_data;
+};
+
 // Windows, subwindows, popupwindows inherit from this
 class BC_WindowBase
 {
@@ -155,13 +165,13 @@ public:
 	friend class BC_Tumbler;
 	friend class BC_Window;
 	friend class BC_WindowEvents;
-#ifdef X_HAVE_UTF8_STRING
-	XIM im;		/* Used to communicate with the input method (IM) server */
-	XIC ic;		/* Used for retaining the state, properties, and semantics of communication with the input method (IM) server */
-#endif
 
 // Main loop
 	int run_window();
+// Schedule a user function to run in the run_window thread.
+// Deleted by run_window
+// Window is locked before running the function.
+    void put_event(void (*user_function)(void *), void *data);
 // Terminal event dispatchers
 	virtual int close_event();
 	virtual int resize_event(int w, int h);
@@ -223,6 +233,8 @@ public:
 	void put_shader(unsigned int handle, char *title);
 
 
+// return 1 if initialization worked
+    int exists();
 	int flash(int x, int y, int w, int h, int flush = 1);
 	int flash(int flush = 1);
 	void flush();
@@ -243,7 +255,7 @@ public:
 	static BC_Resources* get_resources();
 // User must create synchronous object first
 	static BC_Synchronous* get_synchronous();
-	static BC_CModels* get_cmodels();
+//	static BC_CModels* get_cmodels();
 
 // Dimensions
 	virtual int get_w();
@@ -267,6 +279,8 @@ public:
 
 // 1 or 0 if a button is down
 	int get_button_down();
+// must clear it if the widget owning the button down is deleted
+    void clear_button_down();
 // Number of button pressed 1 - 5
 	int get_buttonpress();
 	int get_has_focus();
@@ -349,6 +363,15 @@ public:
 	void copy_area(int x1, int y1, int x2, int y2, int w, int h, BC_Pixmap *pixmap = 0);
 	void clear_box(int x, int y, int w, int h, BC_Pixmap *pixmap = 0);
 	void draw_box(int x, int y, int w, int h, BC_Pixmap *pixmap = 0);
+// draw a box in the current color with a checker for alpha
+    void draw_box_alpha(int x, 
+        int y, 
+        int w, 
+        int h, 
+        int a, 
+        int checker_w,
+        int checker_h,
+        BC_Pixmap *pixmap = 0);
 	void draw_circle(int x, int y, int w, int h, BC_Pixmap *pixmap = 0);
 	void draw_arc(int x, 
 		int y, 
@@ -638,7 +661,7 @@ private:
     XFontSet get_fontset(int font);
     XFontSet get_curr_fontset(void);
     void set_fontset(int font);
-	int dispatch_event(XEvent *event);
+	int dispatch_event(BC_Event *event);
 
 	int get_key_masks(XEvent *event);
 
@@ -650,10 +673,10 @@ private:
 	int unset_all_repeaters();
 
 // Block and get event from common events.
-	XEvent* get_event();
+	BC_Event* get_event();
 // Return number of events in table.
 	int get_event_count();
-// Put event in common events.
+// Put X event in common events.  Deleted by run_window
 	void put_event(XEvent *event);
 
 // Recursive event dispatchers
@@ -763,7 +786,7 @@ private:
 	int has_focus;
 
 	static BC_Resources resources;
-	static BC_CModels cmodels;
+//	static BC_CModels cmodels;
 	
 #ifndef SINGLE_THREAD
 // Array of repeaters for multiple repeating objects.
@@ -874,7 +897,7 @@ private:
 	BC_Bitmap *temp_bitmap;
 // Clipboard
 #ifndef SINGLE_THREAD
-	BC_Clipboard *clipboard;
+	static BC_Clipboard *clipboard;
 #endif
 
 #ifdef HAVE_LIBXXF86VM
@@ -883,12 +906,17 @@ private:
    XF86VidModeModeInfo orig_modeline;
 #endif
 
+#ifdef X_HAVE_UTF8_STRING
+	XIM im;		/* Used to communicate with the input method (IM) server */
+	XIC ic;		/* Used for retaining the state, properties, and semantics of communication with the input method (IM) server */
+#endif
 
 
 
 #ifndef SINGLE_THREAD
-// Common events coming from X server and repeater.
-	ArrayList<XEvent*> common_events;
+// Common events to run in the window thread
+// Sources are the X server, repeater threads, & user threads.
+	ArrayList<BC_Event*> common_events;
 // Locks for common events
 // Locking order:
 // 1) event_condition

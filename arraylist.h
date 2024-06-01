@@ -1,4 +1,3 @@
-
 /*
  * CINELERRA
  * Copyright (C) 2008 Adam Williams <broadcast at earthling dot net>
@@ -39,6 +38,8 @@ public:
 	TYPE append();
 // Insert before item number
 	TYPE insert(TYPE value, int number);
+// insert after item number
+    TYPE insert_after(TYPE value, int number);
 
 // allocate
 	void allocate(int new_available);
@@ -64,8 +65,10 @@ public:
 // Call this if the TYPE is a pointer to an array which must be
 // deleted by delete [].
 	void set_array_delete();
+	int get_array_delete();
 	int size();
 	TYPE get(int number);
+    TYPE* get_pointer(int number);
 	TYPE set(int number, TYPE value);
 
 	void sort();
@@ -100,6 +103,12 @@ template<class TYPE>
 void ArrayList<TYPE>::set_array_delete()
 {
     array_delete = 1;
+}
+
+template<class TYPE>
+int ArrayList<TYPE>::get_array_delete()
+{
+    return array_delete;
 }
 
 
@@ -151,12 +160,24 @@ TYPE ArrayList<TYPE>::append()            // add to end of list
 template<class TYPE>
 TYPE ArrayList<TYPE>::insert(TYPE value, int number)
 {
-	append(0);
+	append();
 	for(int i = total - 1; i > number; i--)
 	{
 		values[i] = values[i - 1];
 	}
 	values[number] = value;
+    return value;
+}
+
+template<class TYPE>
+TYPE ArrayList<TYPE>::insert_after(TYPE value, int number)
+{
+	append();
+	for(int i = total - 1; i > number + 1; i--)
+	{
+		values[i] = values[i - 1];
+	}
+	values[number + 1] = value;
     return value;
 }
 
@@ -252,13 +273,16 @@ void ArrayList<TYPE>::remove_number(int number)
 template<class TYPE>
 void ArrayList<TYPE>::remove_all_objects()
 {
-//printf("ArrayList<TYPE>::remove_all_objects 1 %d\n", total);
 	for(int i = 0; i < total; i++)
 	{
 		if(array_delete)
-			delete [] values[i];
-		else
-			delete values[i];
+		{
+        	delete [] values[i];
+		}
+        else
+		{
+        	delete values[i];
+        }
 	}
 	
 	total = 0;
@@ -317,9 +341,19 @@ TYPE ArrayList<TYPE>::get(int number)
 		number,
 		total);
     BC_Signals::dump_stack();
-	return 0;
+	return values[total - 1]; 
 }
 
+template<class TYPE>
+TYPE* ArrayList<TYPE>::get_pointer(int number)
+{
+	if(number < total) return &values[number];
+	printf("ArrayList<TYPE>::get_pointer number=%d total=%d\n",
+		number,
+		total);
+    BC_Signals::dump_stack();
+	return &values[total - 1];
+}
 template<class TYPE>
 TYPE ArrayList<TYPE>::set(int number, TYPE value)
 {

@@ -1249,7 +1249,7 @@ void BC_ListBox::set_autoplacement(ArrayList<BC_ListBoxItem*> *data,
 int BC_ListBox::get_w()
 {
 	if(is_popup)
-		return BCPOPUPLISTBOX_W;
+		return BC_WindowBase::get_resources()->listbox_button[0]->get_w();
 	else
 		return popup_w;
 }
@@ -1257,7 +1257,7 @@ int BC_ListBox::get_w()
 int BC_ListBox::get_h()
 {
 	if(is_popup)
-		return BCPOPUPLISTBOX_H;
+		return BC_WindowBase::get_resources()->listbox_button[0]->get_h();
 	else
 		return popup_h;
 }
@@ -1424,19 +1424,13 @@ int BC_ListBox::get_item_highlight(ArrayList<BC_ListBoxItem*> *data,
 {
 	BC_Resources *resources = get_resources();
 	if(data[column].values[item]->selected)
-	{
-    	return resources->listbox_selected;
-	}
-    else
+		return resources->listbox_selected;
+	else
 	if(highlighted_item >= 0 &&
 		highlighted_ptr == data[master_column].values[item])
-	{
-    	return resources->listbox_highlighted;
-	}
-    else
-	{
-    	return resources->listbox_inactive;
-    }
+		return resources->listbox_highlighted;
+	else
+		return resources->listbox_inactive;
 }
 
 int BC_ListBox::get_item_color(ArrayList<BC_ListBoxItem*> *data, 
@@ -1446,13 +1440,9 @@ int BC_ListBox::get_item_color(ArrayList<BC_ListBoxItem*> *data,
 	int color = data[column].values[item]->color;
 	if(color == -1) color = get_resources()->listbox_text;
 	if(get_item_highlight(data, column, item) == color)
-	{
-    	return BLACK;
-	}
-    else
-	{
-    	return color;
-    }
+		return BLACK;
+	else
+		return color;
 }
 
 int BC_ListBox::get_from_column()
@@ -4030,10 +4020,26 @@ int BC_ListBox::reposition_window(int x, int y, int w, int h, int flush)
 	}
 
 
-	BC_WindowBase::reposition_window(x, y, w, h);
-	draw_button(0);
+	if(!is_popup)
+    {
+// resize the list
+    	BC_WindowBase::reposition_window(x, y, w, h);
+    }
+    else
+    {
+// only reposition the button
+    	BC_WindowBase::reposition_window(x, y);
+	}
+
+    draw_button(0);
 	draw_items(flush);
 	return 0;
+}
+
+void BC_ListBox::resize_popup(int w, int h)
+{
+    popup_w = w;
+    popup_h = h;
 }
 
 int BC_ListBox::deactivate()
@@ -4049,7 +4055,7 @@ int BC_ListBox::deactivate()
 		if(is_popup)
 		{
 //printf("BC_ListBox::deactivate %d this=%p gui=%p\n", __LINE__, this, gui);
-			if(gui) 
+			if(gui)
 			{
 				delete gui;
 				flush();
@@ -4111,9 +4117,15 @@ int BC_ListBox::activate(int take_focus)
 				&new_y, 
 				&tempwin);
 
+// If it extends left of the screen, clamp it
 			if(new_x < 0) new_x = 0;
+
+// If it extends below the screen, bottom justify
 			if(new_y + popup_h > top_level->get_root_h(0)) 
 				new_y -= get_h() + popup_h;
+
+// If it extends above the screen, clamp it
+            if(new_y < 0) new_y = 0;
 
 			add_subwindow(gui = new BC_Popup(this, 
 				new_x, 
@@ -4625,11 +4637,26 @@ void BC_ListBox::draw_title(int number)
 //printf("BC_ListBox::draw_title %d %d\n", __LINE__, column_width[number]);
 	int column_offset = get_column_offset(number) - xposition + LISTBOX_BORDER;
 	int column_width = get_column_width(number, 1);
-	gui->draw_3segmenth(get_column_offset(number) - xposition + LISTBOX_BORDER,
+    int bg_w = get_column_width(number, 1) + get_resources()->listbox_title_overlap;
+    int bg_x = get_column_offset(number) - xposition + LISTBOX_BORDER;
+// no left edge of first column
+    if(number == 0)
+    {
+        int diff = column_bg[image_number]->get_w() / 3;
+        bg_x -= diff;
+        bg_w += diff;
+    }
+
+// no right edge of last column
+	if(number == columns - 1 && bg_w < column_bg[image_number]->get_w() / 3)
+        bg_w += column_bg[image_number]->get_w() / 3;
+    gui->draw_3segmenth(bg_x,
 		LISTBOX_BORDER,
-		get_column_width(number, 1) + get_resources()->listbox_title_overlap,
+		bg_w,
 		column_bg[image_number]);
 
+// printf("BC_ListBox::draw_title %d %d %d w=%d %d\n", 
+// __LINE__, number, columns, bg_w, column_bg[image_number]->get_w());
 // the text
 	int title_x = -xposition + 
 		get_column_offset(number) + 

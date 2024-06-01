@@ -164,7 +164,7 @@ int BC_TextBox::reset_parameters(int rows, int has_border, int font)
 	separators = 0;
 	yscroll = 0;
 	menu = 0;
-    undo_enabled = 0;
+    undo_enabled = 1;
 	return 0;
 }
 
@@ -240,7 +240,8 @@ void BC_TextBox::set_precision(int precision)
 }
 
 // Compute suggestions for a path
-int BC_TextBox::calculate_suggestions(ArrayList<BC_ListBoxItem*> *entries)
+int BC_TextBox::calculate_suggestions(ArrayList<BC_ListBoxItem*> *entries, 
+    int ignore_fs)
 {
 // Let user delete suggestion
 	if(get_last_keypress() != BACKSPACE)
@@ -252,8 +253,9 @@ int BC_TextBox::calculate_suggestions(ArrayList<BC_ListBoxItem*> *entries)
 		const char *current_text = get_text();
 
 // If directory, tabulate it
-		if(current_text[0] == '/' ||
-			current_text[0] == '~')
+		if(!ignore_fs && 
+            (current_text[0] == '/' ||
+			current_text[0] == '~'))
 		{
 //printf("BC_TextBox::calculate_suggestions %d\n", __LINE__);
 			char string[BCTEXTLEN];
@@ -266,7 +268,8 @@ int BC_TextBox::calculate_suggestions(ArrayList<BC_ListBoxItem*> *entries)
 			*(ptr + 1) = 0;
 			int suggestion_column = ptr + 1 - string;
 
-			fs.set_filter(get_resources()->filebox_filter);
+// don't filter or sort it if it's the browse button text
+//			fs.set_filter(get_resources()->filebox_filter);
 //			fs.set_sort_order(filebox->sort_order);
 //			fs.set_sort_field(filebox->column_type[filebox->sort_column]);
 
@@ -1806,7 +1809,7 @@ int BC_TextBox::cut(int do_housekeeping)
 	int text_len = text.length();
 	if(highlight_letter1 != highlight_letter2)
 	{
-		copy_selection(SECONDARY_SELECTION);
+		copy_selection(ALL_SELECTIONS);
 		delete_selection(highlight_letter1, highlight_letter2, text_len);
 		highlight_letter2 = ibeam_letter = highlight_letter1;
 	}
@@ -1828,7 +1831,7 @@ int BC_TextBox::copy(int do_housekeeping)
 	int result = 0;
 	if(highlight_letter1 != highlight_letter2)
 	{
-		copy_selection(SECONDARY_SELECTION);
+		copy_selection(ALL_SELECTIONS);
 		result = 1;
 		if(do_housekeeping)
 		{
@@ -2428,7 +2431,7 @@ void BC_TextBox::select_all()
     draw(1);
 }
 
-void BC_TextBox::copy_selection(int clipboard_num)
+void BC_TextBox::copy_selection(uint32_t clipboard_mask)
 {
 	int text_len = text.length();
 
@@ -2440,13 +2443,13 @@ void BC_TextBox::copy_selection(int clipboard_num)
 
 	get_clipboard()->to_clipboard(text.c_str() + highlight_letter1, 
 		highlight_letter2 - highlight_letter1, 
-		clipboard_num);
+		clipboard_mask);
 }
 
 void BC_TextBox::paste_selection(int clipboard_num)
 {
-//printf("BC_TextBox::paste_selection %d\n", __LINE__);
 	int len = get_clipboard()->clipboard_len(clipboard_num);
+//printf("BC_TextBox::paste_selection %d len=%d\n", __LINE__, len);
 	if(len)
 	{
 		char *string = new char[len + 1];
@@ -2899,6 +2902,16 @@ void BC_PopupTextBox::set_list_w(int value)
     this->list_w = value;
 }
 
+
+void BC_PopupTextBox::set_read_only(int value)
+{
+    if(textbox)
+    {
+        textbox->set_read_only(value);
+    }
+}
+
+
 int BC_PopupTextBox::create_objects()
 {
 	int x = this->x, y = this->y;
@@ -2925,6 +2938,11 @@ void BC_PopupTextBox::update_list(ArrayList<BC_ListBoxItem*> *data)
 const char* BC_PopupTextBox::get_text()
 {
 	return textbox->get_text();
+}
+
+BC_PopupTextBoxText* BC_PopupTextBox::get_textbox()
+{
+    return textbox;
 }
 
 int BC_PopupTextBox::get_number()
@@ -2957,24 +2975,39 @@ int BC_PopupTextBox::handle_event()
 	return 1;
 }
 
-void BC_PopupTextBox::reposition_window(int x, int y)
+void BC_PopupTextBox::reposition_window(int x, int y, int w)
 {
 	this->x = x;
 	this->y = y;
 	int x1 = x, y1 = y;
+    if(w < 0)
+    {
+        w = textbox->get_w();
+    }
+
 	textbox->reposition_window(x1, 
 		y1, 
-		textbox->get_w(), 
+		w, 
 		textbox->get_rows());
 	x1 += textbox->get_w();
+    this->list_w = w + BC_WindowBase::get_resources()->listbox_button[0]->get_w();
 	listbox->reposition_window(x1, 
 		y1, 
-		listbox->get_w(), 
-		listbox->get_h(), 
+		this->list_w, 
+		this->list_h, 
 		0);
 //	if(flush) parent_window->flush();
 }
 
+int BC_PopupTextBox::calculate_h()
+{
+	return BC_WindowBase::get_resources()->listbox_button[0]->get_h();
+}
+
+int BC_PopupTextBox::calculate_w()
+{
+	return BC_WindowBase::get_resources()->listbox_button[0]->get_w();
+}
 
 
 
@@ -3158,6 +3191,14 @@ void BC_TumbleTextBox::set_increment(float value)
 	if(tumbler) tumbler->set_increment(value);
 }
 
+void BC_TumbleTextBox::set_read_only(int value)
+{
+    if(textbox)
+    {
+        textbox->set_read_only(value);
+    }
+}
+
 int BC_TumbleTextBox::create_objects()
 {
 	int x = this->x, y = this->y;
@@ -3285,10 +3326,18 @@ int BC_TumbleTextBox::handle_event()
 	return 1;
 }
 
-void BC_TumbleTextBox::reposition_window(int x, int y)
+void BC_TumbleTextBox::reposition_window(int x, int y, int w)
 {
 	this->x = x;
 	this->y = y;
+    if(w < 0)
+    {
+        w = text_w;
+    }
+    else
+    {
+        text_w = w;
+    }
 	
 	textbox->reposition_window(x, 
  		y, 
@@ -3310,6 +3359,16 @@ void BC_TumbleTextBox::set_boundaries(float min, float max)
 	tumbler->set_boundaries(min, max);
 }
 
+
+int BC_TumbleTextBox::calculate_h()
+{
+	return BC_WindowBase::get_resources()->tumble_data[0]->get_h();
+}
+
+int BC_TumbleTextBox::calculate_w()
+{
+	return BC_WindowBase::get_resources()->tumble_data[0]->get_w();
+}
 
 
 
