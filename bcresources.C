@@ -528,16 +528,16 @@ void BC_Resources::init()
 // 			new VFrame(dash_png)
 // 		};
 
-	#include "images/tumble_bottom_png.h"
-	#include "images/tumble_top_png.h"
+	#include "images/tumble_bottomdn_png.h"
+	#include "images/tumble_topdn_png.h"
 	#include "images/tumble_hi_png.h"
 	#include "images/tumble_up_png.h"
 		static VFrame* default_tumbler_data[] = 
 		{
 			new VFrame(tumble_up_png),
 			new VFrame(tumble_hi_png),
-			new VFrame(tumble_bottom_png),
-			new VFrame(tumble_top_png)
+			new VFrame(tumble_bottomdn_png),
+			new VFrame(tumble_topdn_png)
 		};
 
 	#include "images/xmeter_normal_png.h"

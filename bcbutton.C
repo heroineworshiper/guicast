@@ -169,7 +169,6 @@ int BC_Button::cursor_enter_event()
 {
 	if(is_event_win() && enabled)
 	{
-//printf("BC_Button::cursor_enter_event %d\n", __LINE__);
 		tooltip_done = 0;
 		if(top_level->button_down)
 		{
@@ -186,7 +185,6 @@ int BC_Button::cursor_leave_event()
 {
 	if(status == BUTTON_UPHI)
 	{
-//printf("BC_Button::cursor_leave_event %d\n", __LINE__);
 		status = BUTTON_UP;
 
 		draw_face();

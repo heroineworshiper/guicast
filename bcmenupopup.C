@@ -286,25 +286,25 @@ int BC_MenuPopup::activate_menu(int x,
 	active = 1;
 	if(menu_bar)
 	{
-		menu_bar->add_subwindow(popup = new BC_Popup(
-                    this->x, 
-					this->y, 
-					this->w, 
-					this->h, 
-					top_level->get_resources()->menu_up,
-					1,
-					menu_bar->bg_pixmap));
-	}
-	else
-	{
-		menu_bar->add_subwindow(popup = new BC_Popup(
+		popup = new BC_Popup(menu_bar, 
 					this->x, 
 					this->y, 
 					this->w, 
 					this->h, 
 					top_level->get_resources()->menu_up,
 					1,
-					0));
+					menu_bar->bg_pixmap);
+	}
+	else
+	{
+		popup = new BC_Popup(top_level, 
+					this->x, 
+					this->y, 
+					this->w, 
+					this->h, 
+					top_level->get_resources()->menu_up,
+					1,
+					0);
 //		popup->set_background(top_level->get_resources()->menu_bg);
 	}
 

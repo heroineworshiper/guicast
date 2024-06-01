@@ -31,7 +31,6 @@ BC_SubWindow::BC_SubWindow(int x, int y, int w, int h, int bg_color)
 	this->w = w; 
 	this->h = h;
 	this->bg_color = bg_color;
-    this->window_type = SUB_WINDOW;
 //printf("BC_SubWindow::BC_SubWindow 1\n");
 }
 
@@ -54,6 +53,7 @@ int BC_SubWindow::initialize()
 			1, 
 			bg_color, 
 			NULL, 
+			SUB_WINDOW, 
 			0,
 			0);
 	return 0;
@@ -62,3 +62,13 @@ int BC_SubWindow::initialize()
 
 
 
+
+
+BC_SubWindowList::BC_SubWindowList()
+ : ArrayList<BC_WindowBase*>()
+{
+}
+
+BC_SubWindowList::~BC_SubWindowList()
+{
+}

@@ -32,8 +32,7 @@
 class BC_Toggle : public BC_SubWindow
 {
 public:
-	BC_Toggle(int x, 
-        int y, 
+	BC_Toggle(int x, int y, 
 		VFrame **data,
 		int value, 
 		const char *caption = "",
