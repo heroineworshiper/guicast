@@ -29,31 +29,30 @@
 class BC_Popup : public BC_WindowBase
 {
 public:
-	BC_Popup(BC_WindowBase *parent_window, 
-				int x, 
-				int y, 
-				int w, 
-				int h, 
-				int bg_color, 
-				int hide = 0, 
-				BC_Pixmap *bg_pixmap = 0);
+	BC_Popup(int x, 
+        int y, 
+        int w, 
+        int h, 
+        int bg_color, 
+        int hide = 0, 
+        BC_Pixmap *bg_pixmap = 0);
 	virtual ~BC_Popup();
 
-	int initialize() { return 0; };
-private:
+	virtual int initialize();
 };
 
 class BC_FullScreen : public BC_WindowBase
 {
 public:
-   BC_FullScreen(BC_WindowBase *parent_window, 
-			   int w, 
-			   int h, 
-			   int bg_color, 
-			   int vm_scale,
-			   int hide = 0, 
-			   BC_Pixmap *bg_pixmap = 0);
-   virtual ~BC_FullScreen();
+    BC_FullScreen(int w, 
+        int h, 
+        int bg_color, 
+        int vm_scale,
+        int hide = 0, 
+        BC_Pixmap *bg_pixmap = 0);
+    virtual ~BC_FullScreen();
+	virtual int initialize();
+    int vm_scale;
 };
 
 #endif

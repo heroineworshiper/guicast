@@ -81,9 +81,8 @@ void BC_WindowEvents::run()
 		fd_set x_fds;
 		FD_ZERO(&x_fds);
 		FD_SET(x_fd, &x_fds);
-//printf("BC_WindowEvents::run %d %s\n", __LINE__, window->title);
 		select(x_fd + 1, &x_fds, 0, 0, 0);
-		
+
 		XLockDisplay(window->display);
 		while(XPending(window->display) && !done)
 		{

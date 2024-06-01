@@ -239,14 +239,14 @@ int BC_Pan::activate()
 	y -= (images[PAN_POPUP]->get_h() - get_h()) / 2;
 	if (x < 0) x = 0;
 
-	popup = new BC_Popup(this, 
+	add_subwindow(popup = new BC_Popup(
 				x, 
 				y, 
 				images[PAN_POPUP]->get_w(), 
 				images[PAN_POPUP]->get_h(), 
 				0, 
 				0, 
-				images[PAN_POPUP]);
+				images[PAN_POPUP]));
 	flush();
 	return 0;
 }

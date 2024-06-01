@@ -24,6 +24,7 @@
 BC_Window::BC_Window()
  : BC_WindowBase()
 {
+	this->window_type = MAIN_WINDOW;
 }
 
 BC_Window::BC_Window(const char *title, 
@@ -41,6 +42,7 @@ BC_Window::BC_Window(const char *title,
 				int group_it)
  : BC_WindowBase()
 {
+	this->window_type = MAIN_WINDOW;
 	BC_WindowBase::create_window(0,
 				title, 
 				x,
@@ -54,7 +56,6 @@ BC_Window::BC_Window(const char *title,
 				hide,
 				bg_color,
 				display_name,
-				MAIN_WINDOW,
 				0,
 				group_it);
 }
@@ -93,7 +94,6 @@ void BC_Window::create_window(const char *title,
 	    hide,
 	    bg_color,
 	    display_name,
-	    MAIN_WINDOW,
 	    0,
 	    group_it);
 }
