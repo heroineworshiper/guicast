@@ -266,7 +266,6 @@ int BC_WindowBase::initialize()
 	translation_events = 0;
 	ctrl_mask = shift_mask = alt_mask = 0;
 	cursor_x = cursor_y = button_number = 0;
-    reject_win = -1;
 	button_down = 0;
 	button_pressed = 0;
 	button_time1 = 0;
@@ -4419,11 +4418,6 @@ void BC_WindowBase::put_event(void (*user_function)(void *), void *data)
 int BC_WindowBase::get_id()
 {
 	return id;
-}
-
-Window BC_WindowBase::get_win()
-{
-    return win;
 }
 
 BC_Bitmap* BC_WindowBase::get_temp_bitmap(int w, int h, int color_model)

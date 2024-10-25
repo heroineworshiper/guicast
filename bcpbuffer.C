@@ -1,7 +1,6 @@
-
 /*
  * CINELERRA
- * Copyright (C) 2008 Adam Williams <broadcast at earthling dot net>
+ * Copyright (C) 2008-2024 Adam Williams <broadcast at earthling dot net>
  * 
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -42,6 +41,7 @@ BC_PBuffer::~BC_PBuffer()
 {
 #ifdef HAVE_GL
 	BC_WindowBase::get_synchronous()->release_pbuffer(window_id, pbuffer);
+//BC_Signals::dump_stack();
 #endif
 }
 
@@ -60,6 +60,12 @@ GLXPbuffer BC_PBuffer::get_pbuffer()
 {
 	return pbuffer;
 }
+
+GLXContext BC_PBuffer::get_gl_context()
+{
+    return gl_context;
+}
+
 #endif
 
 
@@ -70,6 +76,12 @@ void BC_PBuffer::new_pbuffer(int w, int h)
 	if(!pbuffer)
 	{
 		BC_WindowBase *current_window = BC_WindowBase::get_synchronous()->current_window;
+        if(!current_window)
+        {
+            printf("BC_PBuffer::new_pbuffer %d no current window\n", __LINE__);
+            return;
+        }
+
 // Try previously created PBuffers
 		pbuffer = BC_WindowBase::get_synchronous()->get_pbuffer(w, 
 			h, 
@@ -158,12 +170,15 @@ void BC_PBuffer::new_pbuffer(int w, int h)
 	    	visinfo = glXGetVisualFromFBConfig(current_window->get_display(), 
 				config_result ? config_result[current_config] : 0);
 
-// printf("BC_PBuffer::new_pbuffer %d current_config=%d visinfo=%p error=%d pbuffer=%p\n",
+// printf("BC_PBuffer::new_pbuffer %d w=%d h=%d current_config=%d visinfo=%p error=%d pbuffer=%lx\n",
 // __LINE__,
+// gl_w,
+// gl_h,
 // current_config,
 // visinfo,
 // BC_Resources::error,
-// pbuffer);
+// (long)pbuffer);
+//BC_Signals::dump_stack();
 
 			if(visinfo) break;
 		}

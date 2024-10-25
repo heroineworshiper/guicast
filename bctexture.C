@@ -1,7 +1,6 @@
-
 /*
  * CINELERRA
- * Copyright (C) 2008 Adam Williams <broadcast at earthling dot net>
+ * Copyright (C) 2008-2022 Adam Williams <broadcast at earthling dot net>
  * 
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -24,8 +23,8 @@
 #include "bcsynchronous.h"
 #include "bctexture.h"
 #include "bcwindowbase.h"
-#include "bccmodels.h"
-
+//#include "bccmodels.h"
+#include "colormodels.h"
 
 BC_Texture::BC_Texture(int w, int h, int colormodel)
 {
@@ -51,8 +50,14 @@ void BC_Texture::clear_objects()
 {
 	if(get_texture_id() >= 0)
 	{
-// printf("VFrame::clear_objects %p window_id=%d texture_id=%d w=%d h=%d\n", 
-// this, window_id, texture_id, texture_w, texture_h);
+// printf("BC_Texture::clear_objects %d %p window_id=%d texture_id=%d w=%d h=%d\n", 
+// __LINE__, 
+// this, 
+// window_id, 
+// texture_id, 
+// texture_w, 
+// texture_h);
+
 		BC_WindowBase::get_synchronous()->release_texture(
 			window_id,
 			texture_id);
@@ -84,13 +89,17 @@ void BC_Texture::create_texture(int w, int h, int colormodel)
  	int max_texture_size = 0;
  	glGetIntegerv(GL_MAX_TEXTURE_SIZE, &max_texture_size);
 
-// Calculate dimensions of texture
+// Calculate aligned dimensions of texture
 	int new_w = calculate_texture_size(w, &max_texture_size);
 	int new_h = calculate_texture_size(h, &max_texture_size);
 //	int new_w = w;
 //	int new_h = h;
-	int new_components = BC_CModels::components(colormodel);
-
+	int new_components = cmodel_components(colormodel);
+// For planar colormodels, we pack anonymous data in all RGBA channels.
+    if(cmodel_is_planar(colormodel))
+    {
+        new_components = 4;
+    }
 
 	if(new_w < w || new_h < h)
 	{
@@ -173,7 +182,8 @@ void BC_Texture::create_texture(int w, int h, int colormodel)
 			texture_w,
 			texture_h,
 			texture_components);
-// printf("BC_Texture::new_texture created texture_id=%d window_id=%d w=%d h=%d\n", 
+// printf("BC_Texture::new_texture %d created texture_id=%d window_id=%d w=%d h=%d\n", 
+// __LINE__,
 // texture_id,
 // window_id,
 // texture_w,

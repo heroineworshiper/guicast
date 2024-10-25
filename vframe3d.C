@@ -1,7 +1,6 @@
-
 /*
  * CINELERRA
- * Copyright (C) 2011-2021 Adam Williams <broadcast at earthling dot net>
+ * Copyright (C) 2011-2022 Adam Williams <broadcast at earthling dot net>
  * 
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -41,6 +40,19 @@
 
 int VFrame::get_opengl_state()
 {
+// texture not available if GL context changed
+    if(opengl_state == VFrame::TEXTURE &&
+        BC_WindowBase::get_synchronous()->get_window() &&
+        BC_WindowBase::get_synchronous()->get_window()->get_id() !=
+        get_window_id())
+    {
+printf("VFrame::get_opengl_state %d: invalid texture.  old window id=%d new window id=%d\n", 
+__LINE__,
+get_window_id(),
+BC_WindowBase::get_synchronous()->get_window()->get_id());
+        opengl_state = VFrame::RAM;
+    }
+
 	return opengl_state;
 }
 
@@ -95,6 +107,20 @@ void VFrame::to_texture()
 		get_w(),
 		get_h(),
 		get_color_model());
+
+
+// texture not available if GL context changed
+    if(opengl_state == VFrame::TEXTURE &&
+        BC_WindowBase::get_synchronous()->get_window() &&
+        BC_WindowBase::get_synchronous()->get_window()->get_id() !=
+        get_window_id())
+    {
+printf("VFrame::to_texture %d: invalid texture.  old window id=%d new window id=%d\n", 
+__LINE__,
+get_window_id(),
+BC_WindowBase::get_synchronous()->get_window()->get_id());
+        opengl_state = VFrame::RAM;
+    }
 
 // Determine what to do based on state
 	switch(opengl_state)
@@ -166,6 +192,7 @@ void VFrame::to_texture()
 			break;
 
 		case BC_RGB_FLOAT:
+		case BC_YUV_FLOAT:
 			glTexSubImage2D(GL_TEXTURE_2D,
 				0,
 				0,
@@ -233,9 +260,42 @@ void VFrame::to_texture()
 				get_rows()[0]);
 			break;
 
+
+// planar images are just sent as 8 bit RGBA rounded up a row
+        case BC_YUV420P10LE:
+        case BC_YUV420P:
+        case BC_YUV9P:
+        case BC_YUV411P:
+        case BC_YUV422P:
+        case BC_NV12:
+        {
+            int bytes = get_data_size();
+// rows required to transfer planer data to contiguous texture memory
+            int rows = bytes / texture->get_texture_w() / 4;
+            if(rows * w * 4 < bytes) rows++;
+            if(rows > texture->get_texture_h())
+            {
+                printf("VFrame::to_texture %d: data too big to fit in texture rows=%d texture_h=%d.\n", 
+                    __LINE__,
+                    rows,
+                    texture->get_texture_h());
+            }
+			glTexSubImage2D(GL_TEXTURE_2D,
+				0,
+				0,
+				0,
+				texture->get_texture_w(),
+				rows,
+				GL_RGBA,
+				GL_UNSIGNED_BYTE,
+				get_data());
+            break;
+        }
+
 		default:
 			fprintf(stderr, 
-				"VFrame::to_texture: unsupported color model %d.\n", 
+				"VFrame::to_texture %d: unsupported color model %d.\n", 
+                __LINE__,
 				color_model);
 			break;
 	}
@@ -244,39 +304,41 @@ void VFrame::to_texture()
 #endif
 }
 
-void VFrame::to_ram()
-{
-#ifdef HAVE_GL
-printf("VFrame::to_ram %d %d %d\n", __LINE__, get_w(), get_h());
-	switch(opengl_state)
-	{
-// Only pbuffer is supported since this is only called after the 
-// overlay operation onto the pbuffer.
-		case VFrame::SCREEN:
-			if(pbuffer)
-			{
-// TODO: support for odd dimensions
-				enable_opengl();
-				glReadPixels(0, 
-					0, 
-					get_w(), 
-					get_h(), 
-					GL_RGB,
-					GL_UNSIGNED_BYTE,
-					get_rows()[0]);
-				flip_vert();
-			}
-			opengl_state = VFrame::RAM;
-			return;
-	}
-#endif
-}
+// void VFrame::to_ram()
+// {
+// #ifdef HAVE_GL
+// printf("VFrame::to_ram %d %d %d\n", __LINE__, get_w(), get_h());
+// 	switch(opengl_state)
+// 	{
+// // Only pbuffer is supported since this is only called after the 
+// // overlay operation onto the pbuffer.
+// 		case VFrame::SCREEN:
+// 			if(pbuffer)
+// 			{
+// // TODO: support for odd dimensions
+// 				enable_opengl();
+// 				glReadPixels(0, 
+// 					0, 
+// 					get_w(), 
+// 					get_h(), 
+// 					GL_RGB,
+// 					GL_UNSIGNED_BYTE,
+// 					get_rows()[0]);
+// 				flip_vert();
+// 			}
+// 			opengl_state = VFrame::RAM;
+// 			return;
+// 	}
+// #endif
+// }
 
 void VFrame::create_pbuffer()
 {
+#ifdef HAVE_GL
 	if(pbuffer && 
 		pbuffer->window_id != BC_WindowBase::get_synchronous()->current_window->get_id())
 	{
+//printf("VFrame::create_pbuffer %d %p\n", __LINE__, this);
 		delete pbuffer;
 		pbuffer = 0;
 	}
@@ -302,7 +364,10 @@ void VFrame::create_pbuffer()
 	if(!pbuffer)
 	{
 		pbuffer = new BC_PBuffer(fixed_w, fixed_h);
+//printf("VFrame::create_pbuffer %d %p pbuffer=%lx w=%d h=%d\n", 
+//__LINE__, this, (long)pbuffer->get_pbuffer(), get_w(), get_h());
 	}
+#endif // HAVE_GL
 }
 
 void VFrame::enable_opengl()
@@ -509,7 +574,7 @@ static int print_error(char *source, unsigned int object, int is_program)
 
 
 
-unsigned int VFrame::make_shader(int x, ...)
+unsigned int VFrame::make_shader(int dump, ...)
 {
 	unsigned int result = 0;
 #ifdef HAVE_GL
@@ -519,7 +584,7 @@ unsigned int VFrame::make_shader(int x, ...)
 	int current_shader = 0;
 
 	va_list list;
-	va_start(list, x);
+	va_start(list, dump);
 
 	while(1)
 	{
@@ -566,8 +631,8 @@ unsigned int VFrame::make_shader(int x, ...)
 	va_end(list);
 
 // Add main() function which calls all the unique main replacements in order
-	char main_function[BCTEXTLEN];
-	sprintf(main_function, 
+	string main_function;
+	main_function.assign(
 		"\n"
 		"void main()\n"
 		"{\n");
@@ -576,25 +641,49 @@ unsigned int VFrame::make_shader(int x, ...)
 	{
 		char main_replacement[BCTEXTLEN];
 		sprintf(main_replacement, "\tmain%03d();\n", i);
-		strcat(main_function, main_replacement);
+		main_function.append(main_replacement);
 	}
 
-	strcat(main_function, "}\n");
+	main_function.append("}\n");
 	if(!complete_program)
 	{
-		complete_size = strlen(main_function) + 1;
+		complete_size = main_function.length() + 1;
 		complete_program = (char*)malloc(complete_size);
-		strcpy(complete_program, main_function);
+		strcpy(complete_program, main_function.c_str());
 	}
 	else
 	{
-		complete_size += strlen(main_function);
+		complete_size += main_function.length() + 1;
 		complete_program = (char*)realloc(complete_program, complete_size);
-		strcat(complete_program, main_function);
+		strcat(complete_program, main_function.c_str());
 	}
 
 
-
+    if(dump)
+    {
+        printf("VFrame::make_shader %d\n", __LINE__);
+        int line = 1;
+        int line_start = 1;
+        for(int i = 0; i < complete_size; i++)
+        {
+            if(line_start)
+            {
+                char string[BCTEXTLEN];
+                sprintf(string, "%d", line);
+                printf("%s", string);
+                for(int j = 0; j < 6 - strlen(string); j++)
+                    printf(" ");
+                line_start = 0;
+            }
+            printf("%c", complete_program[i]);
+            if(complete_program[i] == '\n')
+            {
+                line++;
+                line_start = 1;
+            }
+        }
+        printf("\n");
+    }
 
 
 	int got_it = 0;
@@ -640,7 +729,7 @@ void VFrame::dump_shader(int shader_id)
 void VFrame::clear_pbuffer()
 {
 #ifdef HAVE_GL
-	if(BC_CModels::is_yuv(get_color_model()))
+	if(cmodel_is_yuv(get_color_model()))
 		glClearColor(0.0, 0.5, 0.5, 0.0);
 	else
 		glClearColor(0.0, 0.0, 0.0, 0.0);

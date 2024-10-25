@@ -1,10 +1,9 @@
 OBJDIR := $(shell uname --machine)
 HAVE_GL := n
 HAVE_CFLAGS := n
-HAVE_XFT := y
 CC = g++
 GCC = gcc
-CFLAGS = -O2 -I/usr/include/freetype2
+CFLAGS = -O2
 LFLAGS = -L/usr/X11R6/lib
 LDLINKER = g++ -shared
 VIDEO_CMODELS := n
