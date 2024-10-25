@@ -1,6 +1,6 @@
 /*
  * CINELERRA
- * Copyright (C) 2010 Adam Williams <broadcast at earthling dot net>
+ * Copyright (C) 2010-2022 Adam Williams <broadcast at earthling dot net>
  * 
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -322,7 +322,7 @@ void FileSystem::alphabetize()
 
 int FileSystem::is_root_dir(char *path)
 {
-	if(!strcmp(current_dir, "/")) return 1;
+	if(!strcmp(path, "/")) return 1;
 	return 0;
 }
 
@@ -896,6 +896,14 @@ int64_t FileSystem::get_size(char *filename)
 	struct stat file_status;
 	bzero(&file_status, sizeof(struct stat));
 	stat(filename, &file_status);
+	return file_status.st_size;
+}
+
+int64_t FileSystem::get_size(std::string *filename)
+{
+	struct stat file_status;
+	bzero(&file_status, sizeof(struct stat));
+	stat(filename->c_str(), &file_status);
 	return file_status.st_size;
 }
 

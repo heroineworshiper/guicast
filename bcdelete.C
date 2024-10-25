@@ -51,9 +51,10 @@ BC_DeleteFile::~BC_DeleteFile()
 
 void BC_DeleteFile::create_objects()
 {
-	int x = DP(10), y = DP(10);
+    int margin = BC_Resources::theme->widget_border;
+	int x = margin, y = margin;
 	data = new ArrayList<BC_ListBoxItem*>;
-	int i = 1;
+	int i = 0;
 	char *path;
 	FileSystem fs;
 
@@ -61,6 +62,7 @@ void BC_DeleteFile::create_objects()
 	lock_window("BC_DeleteFile::create_objects");
 	while((path = filebox->get_path(i)))
 	{
+//printf("BC_DeleteFile::create_objects %d i=%d %s\n", __LINE__, i, path);
 		data->append(new BC_ListBoxItem(path));
 		i++;
 	}
@@ -70,9 +72,9 @@ void BC_DeleteFile::create_objects()
 	y += title->get_h() + DP(5);
 	BC_DeleteList *list;
 	add_subwindow(list = new BC_DeleteList(filebox, 
-		x, 
+		0, 
 		y, 
-		get_w() - x * 2, 
+		get_w(), 
 		get_h() - y - BC_OKButton::calculate_h() - DP(20),
 		data));
 	y += list->get_h() + DP(5);

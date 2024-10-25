@@ -1,7 +1,6 @@
-
 /*
  * CINELERRA
- * Copyright (C) 1997-2014 Adam Williams <broadcast at earthling dot net>
+ * Copyright (C) 1997-2024 Adam Williams <broadcast at earthling dot net>
  * 
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -35,7 +34,7 @@
 #include "bctimer.h"
 #include "bcwindowbase.h"
 #include "bcwindowevents.h"
-#include "bccmodels.h"
+//#include "bccmodels.h"
 #include "colors.h"
 #include "condition.h"
 #include "cursors.h"
@@ -63,6 +62,18 @@ BC_ResizeCall::BC_ResizeCall(int w, int h)
 	this->h = h;
 }
 
+BC_Event::BC_Event()
+{
+    xevent = 0;
+    user_function = 0;
+    user_data = 0;
+}
+
+BC_Event::~BC_Event()
+{
+    if(xevent) delete xevent;
+}
+
 
 
 
@@ -74,7 +85,8 @@ BC_ResizeCall::BC_ResizeCall(int w, int h)
 
 
 BC_Resources BC_WindowBase::resources;
-BC_CModels BC_WindowBase::cmodels;
+//BC_CModels BC_WindowBase::cmodels;
+BC_Clipboard* BC_WindowBase::clipboard = 0;
 
 Window XGroupLeader = 0;
 
@@ -84,21 +96,26 @@ BC_WindowBase::BC_WindowBase()
 	BC_WindowBase::initialize();
 }
 
+// have to unlock before deleting the top window
 BC_WindowBase::~BC_WindowBase()
 {
+
+    if(top_level->display)
+    {
 #ifdef SINGLE_THREAD
-	BC_Display::lock_display("BC_WindowBase::~BC_WindowBase");
+    	BC_Display::lock_display("BC_WindowBase::~BC_WindowBase");
 #else
-	if(window_type == MAIN_WINDOW) 
-		lock_window("BC_WindowBase::~BC_WindowBase");
+	    if(window_type == MAIN_WINDOW) 
+		    lock_window("BC_WindowBase::~BC_WindowBase");
 #endif
 
 #ifdef HAVE_LIBXXF86VM
-   if(window_type == VIDMODE_SCALED_WINDOW && vm_switched)
-   {
-	   restore_vm();   
-   }
+        if(window_type == VIDMODE_SCALED_WINDOW && vm_switched)
+        {
+	        restore_vm();   
+        }
 #endif
+    }
 
 	hide_tooltip();
 	if(window_type != MAIN_WINDOW)
@@ -106,28 +123,30 @@ BC_WindowBase::~BC_WindowBase()
 		if(top_level->active_menubar == this) top_level->active_menubar = 0;
 		if(top_level->active_popup_menu == this) top_level->active_popup_menu = 0;
 		if(top_level->active_subwindow == this) top_level->active_subwindow = 0;
+// Remove pointer from parent window to this
+		parent_window->subwindows->remove(this);
 	}
 
-// Remove pointer from parent window to this
-    if(parent_window)
-    {
-        parent_window->remove_subwindow(this);
-    }
-
+	if(window_type == POPUP_WINDOW) parent_window->remove_popup(this);
 
 // Delete the subwindows
 	is_deleting = 1;
-	while(subwindows.size())
+	if(subwindows)
 	{
+		while(subwindows->size())
+		{
 // Subwindow removes its own pointer
-		delete subwindows.get(0);
+			delete subwindows->get(0);
+		}
+		delete subwindows;
 	}
 
 	delete pixmap;
 
 // Destroyed in synchronous thread if gl context exists.
 #ifdef HAVE_GL
-	if(!gl_win_context || !get_resources()->get_synchronous())
+	if(top_level->display && 
+        (!gl_win_context || !get_resources()->get_synchronous()))
 #endif
 	{
 		XDestroyWindow(top_level->display, win);
@@ -147,7 +166,7 @@ BC_WindowBase::~BC_WindowBase()
 
 
 
-	if(window_type == MAIN_WINDOW) 
+	if(display && window_type == MAIN_WINDOW) 
 	{
 		XFreeGC(display, gc);
 #ifdef HAVE_XFT
@@ -173,6 +192,7 @@ BC_WindowBase::~BC_WindowBase()
 
 		flush();
 
+//printf("BC_WindowBase::~BC_WindowBase %d %p %p\n", __LINE__, gl_win_context, get_resources()->get_synchronous());
 
 // Can't close display if another thread is waiting for events.
 // Synchronous thread must delete display if gl_context exists.
@@ -187,20 +207,11 @@ BC_WindowBase::~BC_WindowBase()
 		}
 
 // clipboard uses a different display connection
-		clipboard->stop_clipboard();
-		delete clipboard;
-#endif // SINGLE_THREAD
+//		clipboard->stop_clipboard();
+//		delete clipboard;
+#endif // !SINGLE_THREAD
 	}
 	else
-    if(window_type == POPUP_WINDOW
-#ifdef HAVE_LIBXXF86VM
-        || window_type == VIDMODE_SCALED_WINDOW
-#endif
-        )
-    {
-        flush();
-    }
-    else
 	{
 //		flush();
 	}
@@ -211,8 +222,8 @@ BC_WindowBase::~BC_WindowBase()
 #ifdef HAVE_GL
 	if(gl_win_context && get_resources()->get_synchronous())
 	{
-		printf("BC_WindowBase::~BC_WindowBase window deleted but opengl deletion is not\n"
-			"implemented for BC_Pixmap.\n");
+//		printf("BC_WindowBase::~BC_WindowBase %d window deleted but opengl deletion is not\n"
+//			"implemented for BC_Pixmap.\n", __LINE__);
 		get_resources()->get_synchronous()->delete_window(this);
 	}
 #endif
@@ -247,6 +258,7 @@ int BC_WindowBase::initialize()
 	line_dashes = 0;
 	top_level = 0;
 	parent_window = 0;
+	subwindows = 0;
 	xvideo_port_id = -1;
 	video_on = 0;
 	motion_events = 0;
@@ -340,6 +352,7 @@ int BC_WindowBase::create_window(BC_WindowBase *parent_window,
 				int hide,
 				int bg_color,
 				const char *display_name,
+				int window_type,
 				BC_Pixmap *bg_pixmap,
 				int group_it)
 {
@@ -352,8 +365,6 @@ int BC_WindowBase::create_window(BC_WindowBase *parent_window,
     int vm;
 #endif
 
-
-
 	id = get_resources()->get_id();
 
 
@@ -363,7 +374,7 @@ int BC_WindowBase::create_window(BC_WindowBase *parent_window,
 
 #ifdef HAVE_LIBXXF86VM
     if(window_type == VIDMODE_SCALED_WINDOW)
-	    closest_vm(&vm, &w, &h);
+	    closest_vm(&vm,&w,&h);
 #endif
 
 	this->x = x;
@@ -371,6 +382,7 @@ int BC_WindowBase::create_window(BC_WindowBase *parent_window,
 	this->w = w;
 	this->h = h;
 	this->bg_color = bg_color;
+	this->window_type = window_type;
 	this->hidden = hide;
 	this->private_color = private_color;
 	this->parent_window = parent_window;
@@ -390,6 +402,7 @@ int BC_WindowBase::create_window(BC_WindowBase *parent_window,
 
 	if(parent_window) top_level = parent_window->top_level;
 
+	subwindows = new BC_SubWindowList;
 
 	if(window_type == MAIN_WINDOW)
 	{
@@ -410,6 +423,13 @@ int BC_WindowBase::create_window(BC_WindowBase *parent_window,
 		XInitThreads();
 		display = init_display(display_name);
 #endif
+
+// fail gracefully
+        if(!display)
+        {
+            return 1;
+        }
+        
 
 
 // window placement boundaries
@@ -515,8 +535,11 @@ int BC_WindowBase::create_window(BC_WindowBase *parent_window,
 		get_atoms();
 
 #ifndef SINGLE_THREAD		
-		clipboard = new BC_Clipboard(display_name);
-		clipboard->start_clipboard();
+        if(!clipboard)
+        {
+    		clipboard = new BC_Clipboard(display_name);
+	    	clipboard->start_clipboard();
+        }
 #endif
 
 
@@ -603,6 +626,8 @@ int BC_WindowBase::create_window(BC_WindowBase *parent_window,
 			top_level->vis, 
 			mask, 
 			&attr);
+
+		top_level->add_popup(this);
 	}
 
 	if(window_type == SUB_WINDOW)
@@ -646,6 +671,7 @@ int BC_WindowBase::create_window(BC_WindowBase *parent_window,
 		}
 
 		if(!hidden) show_window();
+
 	}
 
 
@@ -690,15 +716,16 @@ Display* BC_WindowBase::init_display(const char *display_name)
   		if(getenv("DISPLAY") == NULL)
     	{
 			printf("'DISPLAY' environment variable not set.\n");
-  			exit(1);
+  			return 0;
 		}
 		else
 // Try again with default display.
 		{
 			if((display = XOpenDisplay(0)) == NULL)
 			{
-				printf("BC_WindowBase::init_display: cannot connect to default X server.\n");
-				exit(1);
+				printf("BC_WindowBase::init_display: cannot connect to default X server %s.\n",
+                    getenv("DISPLAY"));
+				return 0;
 			}
 		}
  	}
@@ -749,7 +776,7 @@ int BC_WindowBase::run_window()
 #else // SINGLE_THREAD
 
 
-
+//printf("BC_WindowBase::run_window %d\n", __LINE__);
 // Start tooltips
 	set_repeat(get_resources()->tooltip_delay);
 
@@ -759,15 +786,19 @@ int BC_WindowBase::run_window()
 
 // Release wait lock
 	init_lock->unlock();
+//printf("BC_WindowBase::run_window %d done=%d\n", __LINE__, done);
 
 // Handle common events
 	while(!done)
 	{
 		dispatch_event(0);
 	}
+//printf("BC_WindowBase::run_window %d done=%d\n", __LINE__, done);
 
 	unset_all_repeaters();
 	hide_tooltip();
+
+
 	delete event_thread;
 	event_thread = 0;
 	event_condition->reset();
@@ -797,7 +828,7 @@ int BC_WindowBase::get_key_masks(XEvent *event)
 
 
 
-int BC_WindowBase::dispatch_event(XEvent *event)
+int BC_WindowBase::dispatch_event(BC_Event *event)
 {
     Window tempwin;
   	KeySym keysym;
@@ -820,21 +851,15 @@ int BC_WindowBase::dispatch_event(XEvent *event)
         lock_window("BC_WindowBase::dispatch_event 1");
 	}
 	else
-// Handle compressed events out of order
+// Handle compressed events
 	{
 		lock_window("BC_WindowBase::dispatch_event 2");
 		if(resize_events)
-		{
-        	dispatch_resize_event(last_resize_w, last_resize_h);
-		}
-        if(motion_events)
-		{
-        	dispatch_motion_event();
-		}
-        if(translation_events)
-		{
-        	dispatch_translation_event();
-        }
+			dispatch_resize_event(last_resize_w, last_resize_h);
+		if(motion_events)
+			dispatch_motion_event();
+		if(translation_events)
+			dispatch_translation_event();
 
 		unlock_window();
 		return 0;
@@ -850,428 +875,458 @@ int BC_WindowBase::dispatch_event(XEvent *event)
 
 
 
-if(debug) printf("BC_WindowBase::dispatch_event %d %s %p\n", 
-__LINE__, title, event);
-	switch(event->type)
-	{
-		case ClientMessage:
-			get_key_masks(event);
-// Clear the resize buffer
-			if(resize_events) dispatch_resize_event(last_resize_w, last_resize_h);
-// Clear the motion buffer since this can clear the window
-			if(motion_events)
-			{
-				dispatch_motion_event();
-			}
+if(debug) printf("BC_WindowBase::dispatch_event %d %s %p type=%d\n", 
+__LINE__, title, event, event->xevent->type);
 
-			ptr = (XClientMessageEvent*)event;
-
-
-        	if(ptr->message_type == ProtoXAtom && 
-				ptr->data.l[0] == DelWinXAtom)
-        	{
-				close_event();
-			}
-			else
-			if(ptr->message_type == RepeaterXAtom)
-			{
-				dispatch_repeat_event(ptr->data.l[0]);
-// Make sure the repeater still exists.
-// 				for(int i = 0; i < repeaters.total; i++)
-// 				{
-// 					if(repeaters.values[i]->repeat_id == ptr->data.l[0])
-// 					{
-// 						dispatch_repeat_event_master(ptr->data.l[0]);
-// 						break;
-// 					}
-// 				}
-			}
-			else
-			if(ptr->message_type == SetDoneXAtom)
-			{
-				done = 1;
-			}
-			break;
-
-		case FocusIn:
-			has_focus = 1;
-			dispatch_focus_in();
-			break;
-
-		case FocusOut:
-			has_focus = 0;
-			dispatch_focus_out();
-			break;
-
-// Maximized
-		case MapNotify:
-			break;
-
-// Minimized
-		case UnmapNotify:
-			break;
-
-		case ButtonPress:
-			get_key_masks(event);
-			cursor_x = event->xbutton.x;
-			cursor_y = event->xbutton.y;
-			button_number = event->xbutton.button;
-
-//printf("BC_WindowBase::dispatch_event %d %d\n", __LINE__, button_number);
-			event_win = event->xany.window;
-			if (button_number < 6)
-	  		{
-                int prev_button_pressed = button_pressed;
-				if(button_number < 4)
-					button_down = 1;
-				button_pressed = event->xbutton.button;
-				button_time1 = button_time2;
-				button_time2 = button_time3;
-				button_time3 = event->xbutton.time;
-				drag_x = cursor_x;
-				drag_y = cursor_y;
-				drag_win = event_win;
-				drag_x1 = cursor_x - get_resources()->drag_radius;
-				drag_x2 = cursor_x + get_resources()->drag_radius;
-				drag_y1 = cursor_y - get_resources()->drag_radius;
-				drag_y2 = cursor_y + get_resources()->drag_radius;
-
-				if(prev_button_pressed == button_pressed &&
-                    button_time3 - button_time1 < resources.double_click * 2)
-				{
-					triple_click = 1;
-					button_time3 = button_time2 = button_time1 = 0;
-				}
-				if(prev_button_pressed == button_pressed &&
-                    button_time3 - button_time2 < resources.double_click)
-				{
-					double_click = 1; 
-	//				button_time3 = button_time2 = button_time1 = 0;
-				}
-				else
-				{
-					triple_click = 0;
-					double_click = 0;
-				}
-
-				dispatch_button_press();
-			}
-			break;
-
-		case ButtonRelease:
-			get_key_masks(event);
-			button_number = event->xbutton.button;
-			event_win = event->xany.window;
-			if (button_number < 6) 
-			{
-				if(button_number < 4)
-					button_down = 0;
-//printf("BC_WindowBase::dispatch_event %d %d\n", __LINE__, button_number);
-
-				dispatch_button_release();
-			}
-			break;
-
-		case Expose:
-			event_win = event->xany.window;
-			dispatch_expose_event();
-			break;
-
-		case MotionNotify:
-			get_key_masks(event);
-
-// reject the event
-            if(event->xmotion.x == reject_x &&
-                event->xmotion.y == reject_y &&
-                event->xany.window == reject_win)
-            {
-                reject_win = -1;
-                
-            }
-            else
-            {
-
-// Dispatch previous motion event if this is a subsequent motion from a different window
-			    if(motion_events && last_motion_win != event->xany.window)
+// process an X server event
+    if(event->xevent)
+    {
+        XEvent *xevent = event->xevent;
+        switch(xevent->type)
+	    {
+		    case ClientMessage:
+			    get_key_masks(xevent);
+    // Clear the resize buffer
+			    if(resize_events) dispatch_resize_event(last_resize_w, last_resize_h);
+    // Clear the motion buffer since this can clear the window
+			    if(motion_events)
 			    {
 				    dispatch_motion_event();
 			    }
 
+			    ptr = (XClientMessageEvent*)xevent;
+
+
+        	    if(ptr->message_type == ProtoXAtom && 
+				    ptr->data.l[0] == DelWinXAtom)
+        	    {
+				    close_event();
+			    }
+			    else
+			    if(ptr->message_type == RepeaterXAtom)
+			    {
+				    dispatch_repeat_event(ptr->data.l[0]);
+    // Make sure the repeater still exists.
+    // 				for(int i = 0; i < repeaters.total; i++)
+    // 				{
+    // 					if(repeaters.values[i]->repeat_id == ptr->data.l[0])
+    // 					{
+    // 						dispatch_repeat_event_master(ptr->data.l[0]);
+    // 						break;
+    // 					}
+    // 				}
+			    }
+			    else
+			    if(ptr->message_type == SetDoneXAtom)
+			    {
+    // printf("BC_WindowBase::dispatch_event %d SetDoneXAtom %d %d %d\n", 
+    // __LINE__,
+    // SetDoneXAtom,
+    // event->xany.window,
+    // win);
+				    done = 1;
+			    }
+			    break;
+
+		    case FocusIn:
+			    has_focus = 1;
+			    dispatch_focus_in();
+			    break;
+
+		    case FocusOut:
+			    has_focus = 0;
+			    dispatch_focus_out();
+			    break;
+
+    // Maximized
+		    case MapNotify:
+			    break;
+
+    // Minimized
+		    case UnmapNotify:
+			    break;
+
+		    case ButtonPress:
+			    get_key_masks(xevent);
+			    cursor_x = xevent->xbutton.x;
+			    cursor_y = xevent->xbutton.y;
+			    button_number = xevent->xbutton.button;
+
+    //printf("BC_WindowBase::dispatch_event %d %d\n", __LINE__, button_number);
+			    event_win = xevent->xany.window;
+			    if (button_number < 6)
+	  		    {
+                    int prev_button_pressed = button_pressed;
+				    if(button_number < 4)
+					    button_down = 1;
+				    button_pressed = xevent->xbutton.button;
+				    button_time1 = button_time2;
+				    button_time2 = button_time3;
+				    button_time3 = xevent->xbutton.time;
+				    drag_x = cursor_x;
+				    drag_y = cursor_y;
+				    drag_win = event_win;
+				    drag_x1 = cursor_x - get_resources()->drag_radius;
+				    drag_x2 = cursor_x + get_resources()->drag_radius;
+				    drag_y1 = cursor_y - get_resources()->drag_radius;
+				    drag_y2 = cursor_y + get_resources()->drag_radius;
+
+				    if(prev_button_pressed == button_pressed &&
+                        button_time3 - button_time1 < resources.double_click * 2)
+				    {
+					    triple_click = 1;
+					    button_time3 = button_time2 = button_time1 = 0;
+				    }
+				    if(prev_button_pressed == button_pressed &&
+                        button_time3 - button_time2 < resources.double_click)
+				    {
+					    double_click = 1; 
+	    //				button_time3 = button_time2 = button_time1 = 0;
+				    }
+				    else
+				    {
+					    triple_click = 0;
+					    double_click = 0;
+				    }
+
+				    dispatch_button_press();
+			    }
+			    break;
+
+		    case ButtonRelease:
+			    get_key_masks(xevent);
+			    button_number = xevent->xbutton.button;
+			    event_win = xevent->xany.window;
+			    if (button_number < 6) 
+			    {
+				    if(button_number < 4)
+					    button_down = 0;
+    //printf("BC_WindowBase::dispatch_event %d %d\n", __LINE__, button_number);
+
+				    dispatch_button_release();
+			    }
+			    break;
+
+		    case Expose:
+			    event_win = xevent->xany.window;
+			    dispatch_expose_event();
+			    break;
+
+		    case MotionNotify:
+			    get_key_masks(xevent);
+// reject the event
+                if(xevent->xmotion.x == reject_x &&
+                    xevent->xmotion.y == reject_y &&
+                    xevent->xany.window == reject_win)
+                {
+                    reject_win = -1;
+
+                }
+                else
+                {
+// Dispatch previous motion event if this is a subsequent motion from a different window
+			        if(motion_events && last_motion_win != xevent->xany.window)
+			        {
+				        dispatch_motion_event();
+			        }
+
 // Buffer the current motion
-			    motion_events = 1;
-			    last_motion_x = event->xmotion.x;
-			    last_motion_y = event->xmotion.y;
-			    last_motion_win = event->xany.window;
-            }
-			break;
+			        motion_events = 1;
+			        last_motion_x = xevent->xmotion.x;
+			        last_motion_y = xevent->xmotion.y;
+			        last_motion_win = xevent->xany.window;
+                }
+			    break;
 
-		case ConfigureNotify:
-// printf("BC_WindowBase::dispatch_event %d win=%p this->win=%p\n", 
-// __LINE__, 
-// event->xany.window,
-// win);
-// dump_windows();
-			get_key_masks(event);
-			XTranslateCoordinates(top_level->display, 
-				top_level->win, 
-				top_level->rootwin, 
-				0, 
-				0, 
-				&last_translate_x, 
-				&last_translate_y, 
-				&tempwin);
-			last_resize_w = event->xconfigure.width;
-			last_resize_h = event->xconfigure.height;
+		    case ConfigureNotify:
+    // printf("BC_WindowBase::dispatch_event %d win=%p this->win=%p\n", 
+    // __LINE__, 
+    // event->xany.window,
+    // win);
+    // dump_windows();
+			    get_key_masks(xevent);
+			    XTranslateCoordinates(top_level->display, 
+				    top_level->win, 
+				    top_level->rootwin, 
+				    0, 
+				    0, 
+				    &last_translate_x, 
+				    &last_translate_y, 
+				    &tempwin);
+			    last_resize_w = xevent->xconfigure.width;
+			    last_resize_h = xevent->xconfigure.height;
 
-			cancel_resize = 0;
-			cancel_translation = 0;
+			    cancel_resize = 0;
+			    cancel_translation = 0;
 
-// Resize history prevents responses to recursive resize requests
-			for(int i = 0; i < resize_history.total && !cancel_resize; i++)
-			{
-				if(resize_history.values[i]->w == last_resize_w &&
-					resize_history.values[i]->h == last_resize_h)
-				{
-					delete resize_history.values[i];
-					resize_history.remove_number(i);
-					cancel_resize = 1;
-				}
-			}
+    // Resize history prevents responses to recursive resize requests
+			    for(int i = 0; i < resize_history.size() && !cancel_resize; i++)
+			    {
+				    if(resize_history.get(i)->w == last_resize_w &&
+					    resize_history.get(i)->h == last_resize_h)
+				    {
+					    delete resize_history.get(i);
+					    resize_history.remove_number(i);
+					    cancel_resize = 1;
+				    }
+			    }
 
-			if(last_resize_w == w && last_resize_h == h)
-				cancel_resize = 1;
+			    if(last_resize_w == w && last_resize_h == h)
+				    cancel_resize = 1;
 
-			if(!cancel_resize)
-			{
-				resize_events = 1;
-			}
+			    if(!cancel_resize)
+			    {
+				    resize_events = 1;
+			    }
 
-			if((last_translate_x == x && last_translate_y == y))
-				cancel_translation = 1;
+			    if((last_translate_x == x && last_translate_y == y))
+				    cancel_translation = 1;
 
-			if(!cancel_translation)
-			{
-				translation_events = 1;
-			}
+			    if(!cancel_translation)
+			    {
+				    translation_events = 1;
+			    }
 
-			translation_count++;
-			break;
+			    translation_count++;
+			    break;
 
-		case KeyPress:
-			get_key_masks(event);
-  			keys_return[0] = 0;
-#ifdef X_HAVE_UTF8_STRING
-			for (int a = 0; a < KEYPRESSLEN; a++) keys_return[a] = 0;
-			// this is routine re-adapted from xev.c - xutils
-			im = XOpenIM (display, NULL, NULL, NULL);
-			XIMStyles *xim_styles;
-   	        XIMStyle xim_style;
-   	        if (im == NULL) 
-   	        {
-       		printf ("XOpenIM failed\n");
-    		}
+		    case KeyPress:
+			    get_key_masks(xevent);
+  			    keys_return[0] = 0;
+    #ifdef X_HAVE_UTF8_STRING
+			    for (int a = 0; a < KEYPRESSLEN; a++) keys_return[a] = 0;
+			    // this is routine re-adapted from xev.c - xutils
+			    im = XOpenIM (display, NULL, NULL, NULL);
+			    XIMStyles *xim_styles;
+   	            XIMStyle xim_style;
+   	            if (im == NULL) 
+   	            {
+       		    printf ("XOpenIM failed\n");
+    		    }
 
-			if (im) 
-			{
-				char *imvalret;
-        			imvalret = XGetIMValues (im, XNQueryInputStyle, &xim_styles, NULL);
-        			if (imvalret != NULL || xim_styles == NULL) 
-        			{
-            				printf ("input method doesn't support any styles\n");
-        			}
+			    if (im) 
+			    {
+				    char *imvalret;
+        			    imvalret = XGetIMValues (im, XNQueryInputStyle, &xim_styles, NULL);
+        			    if (imvalret != NULL || xim_styles == NULL) 
+        			    {
+            				    printf ("input method doesn't support any styles\n");
+        			    }
 
-    	       			if (xim_styles) 
-    	       			{
-            	         		xim_style = 0;            	               
-            		       		for (int z = 0;  z < xim_styles->count_styles;  z++) 
-            		       		{
-                	       			if (xim_styles->supported_styles[z] == (XIMPreeditNothing | XIMStatusNothing)) 
-                	       			{
-                    					xim_style = xim_styles->supported_styles[z];
-                    	 				break;
-                    	 			}
-            				}
+    	       			    if (xim_styles) 
+    	       			    {
+            	         		    xim_style = 0;            	               
+            		       		    for (int z = 0;  z < xim_styles->count_styles;  z++) 
+            		       		    {
+                	       			    if (xim_styles->supported_styles[z] == (XIMPreeditNothing | XIMStatusNothing)) 
+                	       			    {
+                    					    xim_style = xim_styles->supported_styles[z];
+                    	 				    break;
+                    	 			    }
+            				    }
 
-            				if (xim_style == 0) 
-            				{
-                				printf ("input method doesn't support the style we support\n");
-            				}
-            				XFree (xim_styles);
-        			}
-    			} 
-			if (im && xim_style) 
-			{
-        			ic = XCreateIC (im, 
-                        	XNInputStyle, xim_style, 
-                       		XNClientWindow, win, 
-                       		XNFocusWindow, win, 
-				NULL);
-				if (ic == NULL) 
-				{
-            				printf ("XCreateIC failed\n");
-        			}
-			}
+            				    if (xim_style == 0) 
+            				    {
+                				    printf ("input method doesn't support the style we support\n");
+            				    }
+            				    XFree (xim_styles);
+        			    }
+    			    } 
+			    if (im && xim_style) 
+			    {
+        			    ic = XCreateIC (im, 
+                        	    XNInputStyle, xim_style, 
+                       		    XNClientWindow, win, 
+                       		    XNFocusWindow, win, 
+				    NULL);
+				    if (ic == NULL) 
+				    {
+            				    printf ("XCreateIC failed\n");
+        			    }
+			    }
 
-			if (ic)
-			{
-	  			Xutf8LookupString(ic, (XKeyEvent*)event, keys_return, KEYPRESSLEN, &keysym, 0);
-  			} 
-			else 
-  			{
-  				XLookupString((XKeyEvent*)event, keys_return, KEYPRESSLEN, &keysym, 0);
-  			}
+			    if (ic)
+			    {
+	  			    Xutf8LookupString(ic, (XKeyEvent*)xevent, keys_return, KEYPRESSLEN, &keysym, 0);
+  			    } 
+			    else 
+  			    {
+  				    XLookupString((XKeyEvent*)xevent, keys_return, KEYPRESSLEN, &keysym, 0);
+  			    }
 
-#else // X_HAVE_UTF8_STRING
-			XLookupString((XKeyEvent*)event, keys_return, KEYPRESSLEN, &keysym, 0);
-#endif // !X_HAVE_UTF8_STRING
-
-
-
-//printf("BC_WindowBase::dispatch_event %d keysym=0x%x\n", 
-//__LINE__,
-//keysym);
+    #else // X_HAVE_UTF8_STRING
+			    XLookupString((XKeyEvent*)xevent, keys_return, KEYPRESSLEN, &keysym, 0);
+    #endif // !X_HAVE_UTF8_STRING
 
 
-// block out control keys
-			if(keysym > 0xffe0 && keysym < 0xffff) break;
-// block out Alt_GR key
-			if(keysym == 0xfe03) break;
+
+    //printf("BC_WindowBase::dispatch_event %d keysym=0x%x\n", 
+    //__LINE__,
+    //keysym);
 
 
-			if(test_keypress) printf("BC_WindowBase::dispatch_event %x\n", (int)keysym);
+    // block out control keys
+			    if(keysym > 0xffe0 && keysym < 0xffff) break;
+    // block out Alt_GR key
+			    if(keysym == 0xfe03) break;
 
 
-#ifdef X_HAVE_UTF8_STRING
-//It's Ascii or UTF8?
-// 			if (keysym != 0xffff &&
-//				(keys_return[0] & 0xff) >= 0x7f ) 
-//printf("BC_WindowBase::dispatch_event %d %02x%02x\n", __LINE__, keys_return[0], keys_return[1]);
-
-			if ( ((keys_return[1] & 0xff) > 0x80) && 
-				((keys_return[0] & 0xff) > 0xC0) )
-			{
-//printf("BC_WindowBase::dispatch_event %d\n", __LINE__);
- 				key_pressed_utf8 = keys_return;
- 				key_pressed = keysym & 0xff;
- 	 		} 
-			else 
-			{
-#endif
+			    if(test_keypress) printf("BC_WindowBase::dispatch_event %x\n", (int)keysym);
 
 
-  			switch(keysym)
-			{
-// block out extra keys
-        		case XK_Alt_L:      
-        		case XK_Alt_R:      
-        		case XK_Shift_L:    
-        		case XK_Shift_R:    
-        		case XK_Control_L:  
-        		case XK_Control_R:  
-					key_pressed = 0;         
-					break;
+    #ifdef X_HAVE_UTF8_STRING
+    //It's Ascii or UTF8?
+    // 			if (keysym != 0xffff &&
+    //				(keys_return[0] & 0xff) >= 0x7f ) 
+    //printf("BC_WindowBase::dispatch_event %d %02x%02x\n", __LINE__, keys_return[0], keys_return[1]);
 
-// Translate key codes
-				case XK_Return:     key_pressed = RETURN;    break;
-  	    		case XK_Up:         key_pressed = UP;        break;
-   				case XK_Down:       key_pressed = DOWN;      break;
-   				case XK_Left:       key_pressed = LEFT;      break;
-    			case XK_Right:      key_pressed = RIGHT;     break;
-    			case XK_Next:       key_pressed = PGDN;      break;
-    			case XK_Prior:      key_pressed = PGUP;      break;
-    			case XK_BackSpace:  key_pressed = BACKSPACE; break;
-  	    		case XK_Escape:     key_pressed = ESC;       break;
-  	    		case XK_Tab:
-					if(shift_down())
-						key_pressed = LEFTTAB;
-					else
-						key_pressed = TAB;       
-					break;
-				case XK_ISO_Left_Tab: key_pressed = LEFTTAB; break;
- 				case XK_underscore: key_pressed = '_';       break;
-   	    		case XK_asciitilde: key_pressed = '~';       break;
-				case XK_Delete:     key_pressed = DELETE;    break;
-				case XK_Home:       key_pressed = HOME;      break;
-				case XK_End:        key_pressed = END;       break;
-
-// number pad
-				case XK_KP_Enter:       key_pressed = KPENTER;   break;
-				case XK_KP_Add:         key_pressed = KPPLUS;    break;
-				case XK_KP_1:
-				case XK_KP_End:         key_pressed = KP1;       break;
-				case XK_KP_2:
-				case XK_KP_Down:        key_pressed = KP2;       break;
-				case XK_KP_3:
-				case XK_KP_Page_Down:   key_pressed = KP3;       break;
-				case XK_KP_4:
-				case XK_KP_Left:        key_pressed = KP4;       break;
-				case XK_KP_5:
-				case XK_KP_Begin:       key_pressed = KP5;       break;
-				case XK_KP_6:
-				case XK_KP_Right:       key_pressed = KP6;       break;
-				case XK_KP_7:
-				case XK_KP_Home:        key_pressed = KP7;       break;
-				case XK_KP_8:
-				case XK_KP_Up:          key_pressed = KP8;       break;
-				case XK_KP_9:
-				case XK_KP_Page_Up:     key_pressed = KP9;       break;
-				case XK_KP_0:
-				case XK_KP_Insert:      key_pressed = KPINS;     break;
-				case XK_KP_Decimal:
-				case XK_KP_Delete:      key_pressed = KPDEL;     break;
- 	    		default:           
-					//key_pressed = keys_return[0]; 
-#ifdef X_HAVE_UTF8_STRING
-
- 	 				keys_return[1] = 0;
-//printf("BC_WindowBase::dispatch_event %d\n", __LINE__);
- 	 				key_pressed_utf8 = keys_return;	
- 	 				key_pressed = keysym & 0xff;	
-#else					
- 					key_pressed = keysym & 0xff;
-#endif
-					break;
-			}
-#ifdef X_HAVE_UTF8_STRING
-// not set if keysym was trapped in the switch
-// Don't even know why key_pressed_utf8 is necessary
-				key_pressed_utf8 = keys_return;
-			}
-#endif
+			    if ( ((keys_return[1] & 0xff) > 0x80) && 
+				    ((keys_return[0] & 0xff) > 0xC0) )
+			    {
+    //printf("BC_WindowBase::dispatch_event %d\n", __LINE__);
+ 				    key_pressed_utf8 = keys_return;
+ 				    key_pressed = keysym & 0xff;
+ 	 		    } 
+			    else 
+			    {
+    #endif
 
 
-//printf("BC_WindowBase::dispatch_event %d %d %x\n", shift_down(), alt_down(), key_pressed);
-			result = dispatch_keypress_event();
-// Handle some default keypresses
-			if(!result)
-			{
-				if(key_pressed == 'w' ||
-					key_pressed == 'W')
-				{
-					close_event();
-				}
-			}
-			break;
+  			    switch(keysym)
+			    {
+    // block out extra keys
+        		    case XK_Alt_L:      
+        		    case XK_Alt_R:      
+        		    case XK_Shift_L:    
+        		    case XK_Shift_R:    
+        		    case XK_Control_L:  
+        		    case XK_Control_R:  
+					    key_pressed = 0;         
+					    break;
 
-		case KeyRelease:
-  			XLookupString((XKeyEvent*)event, keys_return, 1, &keysym, 0);
-			dispatch_keyrelease_event();
-// printf("BC_WindowBase::dispatch_event KeyRelease keysym=0x%x keystate=0x%lld\n", 
-// keysym, event->xkey.state);
-			break;
+    // Translate key codes
+				    case XK_Return:     key_pressed = RETURN;    break;
+  	    		    case XK_Up:         key_pressed = UP;        break;
+   				    case XK_Down:       key_pressed = DOWN;      break;
+   				    case XK_Left:       key_pressed = LEFT;      break;
+    			    case XK_Right:      key_pressed = RIGHT;     break;
+    			    case XK_Next:       key_pressed = PGDN;      break;
+    			    case XK_Prior:      key_pressed = PGUP;      break;
+    			    case XK_BackSpace:  key_pressed = BACKSPACE; break;
+  	    		    case XK_Escape:     key_pressed = ESC;       break;
+  	    		    case XK_Tab:
+					    if(shift_down())
+						    key_pressed = LEFTTAB;
+					    else
+						    key_pressed = TAB;       
+					    break;
+				    case XK_ISO_Left_Tab: key_pressed = LEFTTAB; break;
+ 				    case XK_underscore: key_pressed = '_';       break;
+   	    		    case XK_asciitilde: key_pressed = '~';       break;
+				    case XK_Delete:     key_pressed = DELETE;    break;
+				    case XK_Home:       key_pressed = HOME;      break;
+				    case XK_End:        key_pressed = END;       break;
 
-		case LeaveNotify:
-			event_win = event->xany.window;
-			dispatch_cursor_leave();
-			break;
+    // number pad
+				    case XK_KP_Enter:       key_pressed = KPENTER;   break;
+				    case XK_KP_Add:         key_pressed = KPPLUS;    break;
+				    case XK_KP_1:
+				    case XK_KP_End:         key_pressed = KP1;       break;
+				    case XK_KP_2:
+				    case XK_KP_Down:        key_pressed = KP2;       break;
+				    case XK_KP_3:
+				    case XK_KP_Page_Down:   key_pressed = KP3;       break;
+				    case XK_KP_4:
+				    case XK_KP_Left:        key_pressed = KP4;       break;
+				    case XK_KP_5:
+				    case XK_KP_Begin:       key_pressed = KP5;       break;
+				    case XK_KP_6:
+				    case XK_KP_Right:       key_pressed = KP6;       break;
+				    case XK_KP_7:
+				    case XK_KP_Home:        key_pressed = KP7;       break;
+				    case XK_KP_8:
+				    case XK_KP_Up:          key_pressed = KP8;       break;
+				    case XK_KP_9:
+				    case XK_KP_Page_Up:     key_pressed = KP9;       break;
+				    case XK_KP_0:
+				    case XK_KP_Insert:      key_pressed = KPINS;     break;
+				    case XK_KP_Decimal:
+				    case XK_KP_Delete:      key_pressed = KPDEL;     break;
+                    case XK_F1:             key_pressed = KEY_F1;    break;
+                    case XK_F2:             key_pressed = KEY_F2;    break;
+                    case XK_F3:             key_pressed = KEY_F3;    break;
+                    case XK_F4:             key_pressed = KEY_F4;    break;
+                    case XK_F5:             key_pressed = KEY_F5;    break;
+                    case XK_F6:             key_pressed = KEY_F6;    break;
+                    case XK_F7:             key_pressed = KEY_F7;    break;
+                    case XK_F8:             key_pressed = KEY_F8;    break;
+                    case XK_F9:             key_pressed = KEY_F9;    break;
+                    case XK_F10:            key_pressed = KEY_F10;   break;
+                    case XK_F11:            key_pressed = KEY_F11;   break;
+                    case XK_F12:            key_pressed = KEY_F12;   break;
+                    
+                    
+ 	    		    default:           
+					    //key_pressed = keys_return[0]; 
+    #ifdef X_HAVE_UTF8_STRING
 
-		case EnterNotify:
-			event_win = event->xany.window;
-			cursor_x = event->xcrossing.x;
-			cursor_y = event->xcrossing.y;
-			dispatch_cursor_enter();
-			break;
-	}
+ 	 				    keys_return[1] = 0;
+    //printf("BC_WindowBase::dispatch_event %d\n", __LINE__);
+ 	 				    key_pressed_utf8 = keys_return;	
+ 	 				    key_pressed = keysym & 0xff;	
+    #else					
+ 					    key_pressed = keysym & 0xff;
+    #endif
+					    break;
+			    }
+    #ifdef X_HAVE_UTF8_STRING
+    // not set if keysym was trapped in the switch
+    // Don't even know why key_pressed_utf8 is necessary
+				    key_pressed_utf8 = keys_return;
+			    }
+    #endif
+
+
+//printf("BC_WindowBase::dispatch_event %d: keysym=0x%x shift=%d alt=%d ctrl=%d key_pressed=%d\n", 
+//__LINE__, (int)keysym, shift_down(), ctrl_down(), alt_down(), key_pressed);
+			    result = dispatch_keypress_event();
+    // Handle some default keypresses
+			    if(!result)
+			    {
+				    if(key_pressed == 'w' ||
+					    key_pressed == 'W')
+				    {
+					    close_event();
+				    }
+			    }
+			    break;
+
+		    case KeyRelease:
+  			    XLookupString((XKeyEvent*)xevent, keys_return, 1, &keysym, 0);
+			    dispatch_keyrelease_event();
+    // printf("BC_WindowBase::dispatch_event KeyRelease keysym=0x%x keystate=0x%lld\n", 
+    // keysym, event->xkey.state);
+			    break;
+
+		    case LeaveNotify:
+			    event_win = xevent->xany.window;
+			    dispatch_cursor_leave();
+			    break;
+
+		    case EnterNotify:
+			    event_win = xevent->xany.window;
+			    cursor_x = xevent->xcrossing.x;
+			    cursor_y = xevent->xcrossing.y;
+			    dispatch_cursor_enter();
+			    break;
+	    }
+    }
+    else
+    if(event->user_function)
+    {
+// run a user function
+        event->user_function(event->user_data);
+    }
 //printf("100 %s %p %d\n", title, event, event->type);
 
 #ifndef SINGLE_THREAD
@@ -1288,9 +1343,9 @@ if(debug) printf("BC_WindowBase::dispatch_event this=%p %d\n", this, __LINE__);
 int BC_WindowBase::dispatch_expose_event()
 {
 	int result = 0;
-	for(int i = 0; i < subwindows.size() && !result; i++)
+	for(int i = 0; i < subwindows->size() && !result; i++)
 	{
-		result = subwindows.get(i)->dispatch_expose_event();
+		result = subwindows->get(i)->dispatch_expose_event();
 	}
 
 // Propagate to user
@@ -1313,9 +1368,9 @@ int BC_WindowBase::dispatch_resize_event(int w, int h)
 	}
 
 // Propagate to subwindows
-	for(int i = 0; i < subwindows.size(); i++)
+	for(int i = 0; i < subwindows->size(); i++)
 	{
-		subwindows.get(i)->dispatch_resize_event(w, h);
+		subwindows->get(i)->dispatch_resize_event(w, h);
 	}
 
 // Propagate to user
@@ -1343,9 +1398,9 @@ int BC_WindowBase::dispatch_translation_event()
 		y -= y_correction;
 	}
 
-	for(int i = 0; i < subwindows.size(); i++)
+	for(int i = 0; i < subwindows->size(); i++)
 	{
-		subwindows.get(i)->dispatch_translation_event();
+		subwindows->get(i)->dispatch_translation_event();
 	}
 
 	translation_event();
@@ -1398,9 +1453,9 @@ int BC_WindowBase::dispatch_motion_event()
 	}
 
 // Dispatch in stacking order
-	for(int i = subwindows.size() - 1; i >= 0 && !result; i--)
+	for(int i = subwindows->size() - 1; i >= 0 && !result; i--)
 	{
-		result = subwindows.get(i)->dispatch_motion_event();
+		result = subwindows->get(i)->dispatch_motion_event();
 	}
 
 	if(!result) result = cursor_motion_event();    // give to user
@@ -1415,9 +1470,9 @@ int BC_WindowBase::dispatch_keypress_event()
 		if(active_subwindow) result = active_subwindow->dispatch_keypress_event();
 	}
 
-	for(int i = 0; i < subwindows.size() && !result; i++)
+	for(int i = 0; i < subwindows->size() && !result; i++)
 	{
-		result = subwindows.get(i)->dispatch_keypress_event();
+		result = subwindows->get(i)->dispatch_keypress_event();
 	}
 
 	if(!result) result = keypress_event();
@@ -1433,9 +1488,9 @@ int BC_WindowBase::dispatch_keyrelease_event()
 		if(active_subwindow) result = active_subwindow->dispatch_keyrelease_event();
 	}
 
-	for(int i = 0; i < subwindows.size() && !result; i++)
+	for(int i = 0; i < subwindows->size() && !result; i++)
 	{
-		result = subwindows.get(i)->dispatch_keyrelease_event();
+		result = subwindows->get(i)->dispatch_keyrelease_event();
 	}
 
 	if(!result) result = keyrelease_event();
@@ -1445,9 +1500,9 @@ int BC_WindowBase::dispatch_keyrelease_event()
 
 int BC_WindowBase::dispatch_focus_in()
 {
-	for(int i = 0; i < subwindows.size(); i++)
+	for(int i = 0; i < subwindows->size(); i++)
 	{
-		subwindows.get(i)->dispatch_focus_in();
+		subwindows->get(i)->dispatch_focus_in();
 	}
 
 	focus_in_event();
@@ -1457,9 +1512,9 @@ int BC_WindowBase::dispatch_focus_in()
 
 int BC_WindowBase::dispatch_focus_out()
 {
-	for(int i = 0; i < subwindows.size(); i++)
+	for(int i = 0; i < subwindows->size(); i++)
 	{
-		subwindows.get(i)->dispatch_focus_out();
+		subwindows->get(i)->dispatch_focus_out();
 	}
 
 	focus_out_event();
@@ -1491,9 +1546,9 @@ int BC_WindowBase::dispatch_button_press()
 		if(active_subwindow && !result) result = active_subwindow->dispatch_button_press();
 	}
 
-	for(int i = 0; i < subwindows.size() && !result; i++)
+	for(int i = 0; i < subwindows->size() && !result; i++)
 	{
-		result = subwindows.get(i)->dispatch_button_press();
+		result = subwindows->get(i)->dispatch_button_press();
 	}
 
 	if(!result) result = button_press_event();
@@ -1514,9 +1569,9 @@ int BC_WindowBase::dispatch_button_release()
 			result = dispatch_drag_stop();
 	}
 
-	for(int i = 0; i < subwindows.size() && !result; i++)
+	for(int i = 0; i < subwindows->size() && !result; i++)
 	{
-		result = subwindows.get(i)->dispatch_button_release();
+		result = subwindows->get(i)->dispatch_button_release();
 	}
 
 	if(!result)
@@ -1533,9 +1588,9 @@ int BC_WindowBase::dispatch_repeat_event(int64_t duration)
 
 // all repeat event handlers get called and decide based on activity and duration
 // whether to respond
-	for(int i = 0; i < subwindows.size(); i++)
+	for(int i = 0; i < subwindows->size(); i++)
 	{
-		subwindows.get(i)->dispatch_repeat_event(duration);
+		subwindows->get(i)->dispatch_repeat_event(duration);
 	}
 
 
@@ -1549,11 +1604,11 @@ int BC_WindowBase::dispatch_repeat_event(int64_t duration)
 #ifdef SINGLE_THREAD
 		BC_Display::display_global->unlock_repeaters(duration);
 #else
-		for(int i = 0; i < repeaters.total; i++)
+		for(int i = 0; i < repeaters.size(); i++)
 		{
-			if(repeaters.values[i]->delay == duration)
+			if(repeaters.get(i)->delay == duration)
 			{
-				repeaters.values[i]->repeat_lock->unlock();
+				repeaters.get(i)->repeat_lock->unlock();
 			}
 		}
 #endif
@@ -1597,14 +1652,9 @@ int BC_WindowBase::dispatch_cursor_leave()
 {
 	unhide_cursor();
 
-	for(int i = 0; i < popups.size(); i++)
+	for(int i = 0; i < subwindows->size(); i++)
 	{
-		popups.get(i)->dispatch_cursor_leave();
-	}
-
-	for(int i = 0; i < subwindows.size(); i++)
-	{
-		subwindows.get(i)->dispatch_cursor_leave();
+		subwindows->get(i)->dispatch_cursor_leave();
 	}
 
 	cursor_leave_event();
@@ -1621,9 +1671,9 @@ int BC_WindowBase::dispatch_cursor_enter()
 	if(!result && active_popup_menu) result = active_popup_menu->dispatch_cursor_enter();
 	if(!result && active_subwindow) result = active_subwindow->dispatch_cursor_enter();
 
-	for(int i = 0; !result && i < subwindows.size(); i++)
+	for(int i = 0; !result && i < subwindows->size(); i++)
 	{
-		result = subwindows.get(i)->dispatch_cursor_enter();
+		result = subwindows->get(i)->dispatch_cursor_enter();
 	}
 
 	if(!result) result = cursor_enter_event();
@@ -1653,9 +1703,9 @@ int BC_WindowBase::dispatch_drag_start()
 	if(!result && active_popup_menu) result = active_popup_menu->dispatch_drag_start();
 	if(!result && active_subwindow) result = active_subwindow->dispatch_drag_start();
 	
-	for(int i = 0; i < subwindows.size() && !result; i++)
+	for(int i = 0; i < subwindows->size() && !result; i++)
 	{
-		result = subwindows.get(i)->dispatch_drag_start();
+		result = subwindows->get(i)->dispatch_drag_start();
 	}
 
 	if(!result) result = is_dragging = drag_start_event();
@@ -1666,9 +1716,9 @@ int BC_WindowBase::dispatch_drag_stop()
 {
 	int result = 0;
 
-	for(int i = 0; i < subwindows.size() && !result; i++)
+	for(int i = 0; i < subwindows->size() && !result; i++)
 	{
-		result = subwindows.get(i)->dispatch_drag_stop();
+		result = subwindows->get(i)->dispatch_drag_stop();
 	}
 
 	if(is_dragging && !result) 
@@ -1684,9 +1734,9 @@ int BC_WindowBase::dispatch_drag_stop()
 int BC_WindowBase::dispatch_drag_motion()
 {
 	int result = 0;
-	for(int i = 0; i < subwindows.size() && !result; i++)
+	for(int i = 0; i < subwindows->size() && !result; i++)
 	{
-		result = subwindows.get(i)->dispatch_drag_motion();
+		result = subwindows->get(i)->dispatch_drag_motion();
 	}
 	
 	if(is_dragging && !result)
@@ -1729,11 +1779,12 @@ int BC_WindowBase::show_tooltip(int w, int h)
 				&x, 
 				&y, 
 				&tempwin);
-        add_subwindow(tooltip_popup = new BC_Popup(x,
+		tooltip_popup = new BC_Popup(top_level, 
+					x,
 					y,
 					w, 
 					h, 
-					get_resources()->tooltip_bg_color));
+					get_resources()->tooltip_bg_color);
 
 		draw_tooltip();
 		tooltip_popup->set_font(MEDIUMFONT);
@@ -1745,10 +1796,11 @@ int BC_WindowBase::show_tooltip(int w, int h)
 
 int BC_WindowBase::hide_tooltip()
 {
-	for(int i = 0; i < subwindows.size(); i++)
-	{
-		subwindows.get(i)->hide_tooltip();
-	}
+	if(subwindows)
+		for(int i = 0; i < subwindows->size(); i++)
+		{
+			subwindows->get(i)->hide_tooltip();
+		}
 
 	if(tooltip_on)
 	{
@@ -2513,6 +2565,7 @@ void BC_WindowBase::reposition_cursor(int x, int y)
 }
 
 
+
 void BC_WindowBase::start_hourglass()
 {
 	top_level->start_hourglass_recursive();
@@ -2536,9 +2589,9 @@ void BC_WindowBase::start_hourglass_recursive()
 	if(!is_transparent)
 	{
 		set_cursor(HOURGLASS_CURSOR, 1, 0);
-		for(int i = 0; i < subwindows.size(); i++)
+		for(int i = 0; i < subwindows->size(); i++)
 		{
-			subwindows.get(i)->start_hourglass_recursive();
+			subwindows->get(i)->start_hourglass_recursive();
 		}
 	}
 }
@@ -2559,9 +2612,9 @@ void BC_WindowBase::stop_hourglass_recursive()
 		if(!is_transparent)
 			set_cursor(current_cursor, 1, 0);
 
-		for(int i = 0; i < subwindows.size(); i++)
+		for(int i = 0; i < subwindows->size(); i++)
 		{
-			subwindows.get(i)->stop_hourglass_recursive();
+			subwindows->get(i)->stop_hourglass_recursive();
 		}
 	}
 }
@@ -2876,74 +2929,56 @@ string* BC_WindowBase::get_truncated_text(int font, const string *text, int max_
     result->assign(*text);
     
     int w = get_text_width(font, text->c_str());
-    
-    if(w <= max_w)
+
+    if(w <= max_w || text->length() < 1)
     {
         return result;
     }
+// printf("BC_WindowBase::get_truncated_text %d %s max_w=%d\n", 
+// __LINE__, text->c_str(), max_w);
 
-    int center_x = w / 2;
-    int center_index = -1;
-    int center_x2 = -1;
+//    int left_index = 1;
+    int left_index = text->length() - 1;
+//    int right_index = text->length() - 1;
 
-// get center of string
-// TODO: definitely faster to do with libfreetype
-    for(int i = 1; i <= text->length(); i++)
+    int done = 0;
+// splitting in the middle didn't leave useful information
+// so try truncating on the right
+    while(1)
     {
-        int current_w = get_text_width(font, text->c_str(), i);
-        if(abs(current_w - center_x) < abs(center_x2 - center_x) || 
-            center_x2 == -1)
-        {
-            center_x2 = current_w;
-            center_index = i;
-        }
-    }
+        result->assign(text->substr(0, left_index));
+        result->append("...");
+//        result->append(text->substr(right_index, text->length() - right_index));
+//        if(done) break;
 
-// insert ... in the center
-    if(center_index < text->length() && center_index > -1)
-    {
-        result->insert(center_index, "...");
-// recalculate the width
+// recalculate the width.  Invalid characters throw this off.
         w = get_text_width(font, result->c_str());
-    }
-    else
-    {
-// nothing to do
-        return result;
-    }
 
-    while(w > max_w && 
-        center_index > 0 && 
-        center_index + 3 < result->length())
-    {
-// take away a character from the longer side
-        int left_w = get_text_width(font, 
-            result->c_str(), 
-            center_index);
-        int right_w = get_text_width(font, 
-            result->c_str() + center_index + 3, 
-            result->length() - center_index - 3);
-// printf("BC_WindowBase::get_truncated_text %d left_w=%d right_w=%d center_index=%d w=%d\n", 
+// printf("BC_WindowBase::get_truncated_text %d left_index=%d w=%d c=%d result=%s\n", 
 // __LINE__, 
-// left_w,
-// right_w,
-// center_index, 
-// w);
-        if(left_w < right_w)
-        {
-            result->erase(center_index + 3, 1);
-        }
+// left_index,
+// w,
+// result->at(left_index - 1),
+// result->c_str());
+
+//        if(w > max_w || left_index >= right_index)
+//        {
+//            left_index--;
+//            right_index++;
+//            done = 1;
+//        }
+        if(w <= max_w || left_index <= 0) break;
         else
         {
-            result->erase(center_index - 1, 1);
-            center_index--;
+            left_index--;
+//            left_index++;
+//            right_index--;
         }
-        
-        
-// recalculate the width
-        w = get_text_width(font, result->c_str());
     }
+
+// make the sides equal length by adding chars to the left side
     
+
     return result;
 }
 
@@ -3025,7 +3060,7 @@ int BC_WindowBase::grab_port_id(BC_WindowBase *window, int color_model)
 	if(!get_resources()->use_xvideo) return -1;
 
 // Translate from color_model to X color model
-	x_color_model = cmodels.bc_to_x(color_model);
+	x_color_model = cmodel_bc_to_x(color_model);
 
 // Only local server is fast enough.
 	if(!resources.use_shm) return -1;
@@ -3096,9 +3131,9 @@ int BC_WindowBase::grab_port_id(BC_WindowBase *window, int color_model)
 
 int BC_WindowBase::show_window(int flush) 
 {
-	for(int i = 0; i < subwindows.size(); i++)
+	for(int i = 0; i < subwindows->size(); i++)
 	{
-		subwindows.get(i)->show_window(0);
+		subwindows->get(i)->show_window(0);
 	}
 
 	XMapWindow(top_level->display, win); 
@@ -3110,9 +3145,9 @@ int BC_WindowBase::show_window(int flush)
 
 int BC_WindowBase::hide_window(int flush) 
 { 
-	for(int i = 0; i < subwindows.size(); i++)
+	for(int i = 0; i < subwindows->size(); i++)
 	{
-		subwindows.get(i)->hide_window(0);
+		subwindows->get(i)->hide_window(0);
 	}
 
 	XUnmapWindow(top_level->display, win); 
@@ -3123,7 +3158,7 @@ int BC_WindowBase::hide_window(int flush)
 
 BC_MenuBar* BC_WindowBase::add_menubar(BC_MenuBar *menu_bar)
 {
-	subwindows.append((BC_SubWindow*)menu_bar);
+	subwindows->append((BC_SubWindow*)menu_bar);
 
 	menu_bar->parent_window = this;
 	menu_bar->top_level = this->top_level;
@@ -3131,58 +3166,30 @@ BC_MenuBar* BC_WindowBase::add_menubar(BC_MenuBar *menu_bar)
 	return menu_bar;
 }
 
-
-void BC_WindowBase::remove_subwindow(BC_WindowBase *window)
+BC_WindowBase* BC_WindowBase::add_popup(BC_WindowBase *window)
 {
-#ifdef HAVE_LIBXXF86VM
-    if(window->window_type == POPUP_WINDOW || window->window_type == VIDMODE_SCALED_WINDOW)
-#else
-    if(window->window_type == POPUP_WINDOW)
-#endif
-    {
-	    if(top_level && 
-            this != top_level) 
-		{
-            top_level->remove_subwindow(window);
-	    }
-        else
-		{
-            popups.remove(window);
-        }
-    }
-    else
-    if(window->window_type == SUB_WINDOW)
-    {
-		subwindows.remove(window);
-    }
+//printf("BC_WindowBase::add_popup window=%p win=%p\n", window, window->win);
+	if(this != top_level) return top_level->add_popup(window);
+	popups.append(window);
+	return window;
 }
+
+void BC_WindowBase::remove_popup(BC_WindowBase *window)
+{
+//printf("BC_WindowBase::remove_popup %d size=%d window=%p win=%p\n", __LINE__, popups.size(), window, window->win);
+	if(this != top_level) 
+		top_level->remove_popup(window);
+	else
+		popups.remove(window);
+//printf("BC_WindowBase::remove_popup %d size=%d window=%p win=%p\n", __LINE__, popups.size(), window, window->win);
+}
+
 
 BC_WindowBase* BC_WindowBase::add_subwindow(BC_WindowBase *subwindow)
 {
-//printf("BC_WindowBase::add_subwindow %d this=%p window_type=%d\n", __LINE__, this, window_type);
-#ifdef HAVE_LIBXXF86VM
-    if(subwindow->window_type == POPUP_WINDOW || subwindow->window_type == VIDMODE_SCALED_WINDOW)
-#else
-    if(subwindow->window_type == POPUP_WINDOW)
-#endif
-    {
-        if(top_level && this != top_level)
-        {
-            return top_level->add_subwindow(subwindow);
-        }
+	subwindows->append(subwindow);
 
-	    popups.append(subwindow);
-    }
-    else
-    if(subwindow->window_type == SUB_WINDOW)
-    {
-    	subwindows.append(subwindow);
-    }
-
-	if(subwindow->bg_color == -1)
-    {
-        subwindow->bg_color = this->bg_color;
-    }
+	if(subwindow->bg_color == -1) subwindow->bg_color = this->bg_color;
 
 // parent window must be set before the subwindow initialization
 	subwindow->parent_window = this;
@@ -3216,6 +3223,14 @@ int BC_WindowBase::flash(int x, int y, int w, int h, int flush)
 	if(flush)
 		this->flush();
 	return 0;
+}
+
+int BC_WindowBase::exists()
+{
+    if(display)
+        return 1;
+    else
+        return 0;
 }
 
 int BC_WindowBase::flash(int flush)
@@ -3327,6 +3342,8 @@ void BC_WindowBase::set_done(int return_value)
 		ptr->format = 32;
 		this->return_value = return_value;
 
+//printf("BC_WindowBase::set_done %d\n", __LINE__);
+
 // May lock up here because XSendEvent doesn't work too well 
 // asynchronous with XNextEvent.
 // This causes BC_WindowEvents to forward a copy of the event to run_window where 
@@ -3339,6 +3356,7 @@ void BC_WindowBase::set_done(int return_value)
 			event);
 		XFlush(display);
 		XCloseDisplay(display);
+// this still needs the XSendEvent to wake up the window for some reason
 		put_event(event);
 	}
 #endif
@@ -3459,10 +3477,10 @@ BC_Resources* BC_WindowBase::get_resources()
 	return &BC_WindowBase::resources;
 }
 
-BC_CModels* BC_WindowBase::get_cmodels()
-{
-	return &BC_WindowBase::cmodels;
-}
+// BC_CModels* BC_WindowBase::get_cmodels()
+// {
+// 	return &BC_WindowBase::cmodels;
+// }
 
 BC_Synchronous* BC_WindowBase::get_synchronous()
 {
@@ -3542,9 +3560,9 @@ int BC_WindowBase::cycle_textboxes(int amount)
 int BC_WindowBase::find_next_textbox(BC_WindowBase **first_textbox, BC_WindowBase **next_textbox, int &result)
 {
 // Search subwindows for textbox
-	for(int i = 0; i < subwindows.size() && result < 2; i++)
+	for(int i = 0; i < subwindows->size() && result < 2; i++)
 	{
-		BC_WindowBase *test_subwindow = subwindows.get(i);
+		BC_WindowBase *test_subwindow = subwindows->get(i);
 		test_subwindow->find_next_textbox(first_textbox, next_textbox, result);
 	}
 
@@ -3591,9 +3609,9 @@ int BC_WindowBase::find_prev_textbox(BC_WindowBase **last_textbox, BC_WindowBase
 	}
 
 // Search subwindows for textbox
-	for(int i = subwindows.size() - 1; i >= 0 && result < 2; i--)
+	for(int i = subwindows->size() - 1; i >= 0 && result < 2; i--)
 	{
-		BC_WindowBase *test_subwindow = subwindows.get(i);
+		BC_WindowBase *test_subwindow = subwindows->get(i);
 		test_subwindow->find_prev_textbox(last_textbox, prev_textbox, result);
 	}
 	return 0;
@@ -3708,9 +3726,9 @@ int BC_WindowBase::match_window(Window win)
 {
 	if (this->win == win) return 1;
 	int result = 0;
-	for(int i = 0; i < subwindows.size(); i++)
+	for(int i = 0; i < subwindows->size(); i++)
 	{
-		result = subwindows.get(i)->match_window(win);
+		result = subwindows->get(i)->match_window(win);
 		if (result) return result;
 	}
 	return 0;
@@ -3794,27 +3812,16 @@ int BC_WindowBase::get_cursor_y()
 	return top_level->cursor_y;
 }
 
-int BC_WindowBase::dump_windows(int indent)
+int BC_WindowBase::dump_windows()
 {
-    for(int i = 0; i < indent; i++)
-    {
-        printf("    ");
-    }
-	printf("BC_WindowBase::dump_windows this=%p type=%d x,y=%dx%d w,h=%dx%d\n", 
-        this, 
-        window_type,
-        get_x(),
-        get_y(),
-        get_w(),
-        get_h());
-
-	for(int i = 0; i < subwindows.size(); i++)
+	printf("\tBC_WindowBase::dump_windows window=%p win=%p\n", this, (void*)this->win);
+	for(int i = 0; i < subwindows->size(); i++)
 	{
-    	subwindows.get(i)->dump_windows(indent + 1);
+    	subwindows->get(i)->dump_windows();
 	}
     for(int i = 0; i < popups.size(); i++)
 	{
-    	popups.get(i)->dump_windows(indent + 1);
+    	printf("\tBC_WindowBase::dump_windows popup=%p win=%p\n", popups.get(i), (void*)popups.get(i)->win);
     }
     return 0;
 }
@@ -3831,9 +3838,9 @@ int BC_WindowBase::is_event_subwin()
         return 1;
     }
     
-    for(int i = 0; i < subwindows.size(); i++)
+    for(int i = 0; i < subwindows->size(); i++)
     {
-        if(subwindows.get(i)->is_event_subwin())
+        if(subwindows->get(i)->is_event_subwin())
         {
             return 1;
         }
@@ -3841,6 +3848,7 @@ int BC_WindowBase::is_event_subwin()
     
     return 0;
 }
+
 
 void BC_WindowBase::set_dragging(int value)
 {
@@ -3860,6 +3868,11 @@ int BC_WindowBase::get_buttonpress()
 int BC_WindowBase::get_button_down()
 {
 	return top_level->button_down;
+}
+
+void BC_WindowBase::clear_button_down()
+{
+	top_level->button_down = 0;
 }
 
 int BC_WindowBase::alt_down()
@@ -3929,9 +3942,9 @@ int BC_WindowBase::resize_window(int w, int h)
 	pixmap = new BC_Pixmap(this, w, h);
 
 // Propagate to menubar
-	for(int i = 0; i < subwindows.size(); i++)
+	for(int i = 0; i < subwindows->size(); i++)
 	{
-		subwindows.get(i)->dispatch_resize_event(w, h);
+		subwindows->get(i)->dispatch_resize_event(w, h);
 	}
 
 	draw_background(0, 0, w, h);
@@ -3961,6 +3974,8 @@ int BC_WindowBase::reposition_window(int x, int y)
 int BC_WindowBase::reposition_window(int x, int y, int w, int h)
 {
 	int resize = 0;
+
+//printf("BC_WindowBase::reposition_window %d this=%p\n", __LINE__, this);
 
 // Some tools set their own dimensions before calling this, causing the 
 // resize check to skip.
@@ -4013,9 +4028,9 @@ int BC_WindowBase::reposition_window(int x, int y, int w, int h)
 		delete pixmap;
 		pixmap = new BC_Pixmap(this, this->w, this->h);
 // Propagate to menubar
-		for(int i = 0; i < subwindows.size(); i++)
+		for(int i = 0; i < subwindows->size(); i++)
 		{
-			subwindows.get(i)->dispatch_resize_event(this->w, this->h);
+			subwindows->get(i)->dispatch_resize_event(this->w, this->h);
 		}
 
 //		draw_background(0, 0, w, h);
@@ -4078,14 +4093,14 @@ int BC_WindowBase::set_icon(VFrame *data)
 		PIXMAP_ALPHA,
 		1);
 
-    add_subwindow(icon_window = new BC_Popup(
+	icon_window = new BC_Popup(this, 
 		(int)BC_INFINITY, 
 		(int)BC_INFINITY, 
 		icon_pixmap->get_w(), 
 		icon_pixmap->get_h(), 
 		-1, 
 		1, // All windows are hidden initially
-		icon_pixmap));
+		icon_pixmap);
 
 	XWMHints wm_hints;
 	wm_hints.flags = WindowGroupHint | IconPixmapHint | IconMaskHint | IconWindowHint;
@@ -4155,8 +4170,50 @@ int BC_WindowBase::load_defaults(BC_Hash *defaults)
 	{
 		resources->filebox_sortcolumn = FILEBOX_COLUMNS - 1;
 	}
+    resources->filebox_show_preview = defaults->get("FILEBOX_SHOW_PREVIEW", resources->filebox_show_preview);
 	resources->filebox_sortorder = defaults->get("FILEBOX_SORTORDER", resources->filebox_sortorder);
 	defaults->get("FILEBOX_FILTER", resources->filebox_filter);
+
+
+// load the filters
+    int count = 0;
+    resources->filebox_filters.remove_all();
+    const char *default_filters[] = 
+    {
+        "[*.aac][*.ac3][*.au][*.aif][*.flac][*.mp2][*.mp3][*.ogg][*.wav]",
+        "[*.avi][*.flv][*.mpg][*.mpeg][*.m1v][*.m2v][*.m4v][*.m2t][*.mts][*.ts][*.mkv][*.mov][*.mp4][*.ogg][*.webm][*.wmv]",
+        "[*.AVI][*.MKV][*.MOV][*.MPG][*.MP4][*.MTS]",
+        "[*.exr][*.jpg][*.JPG][*.jpeg][*.png][*.tiff][*.tga][*.list]",
+//        "[*.ifo][*.vob]",
+//        "[*.mp2][*.mp3][*.wav]",
+//        "[*.avi][*.mpg][*.m2v][*.m1v][*.mov]",
+        "heroine*",
+        "*.xml"
+    };
+    int total_default_filters = sizeof(default_filters) / sizeof(char*);
+    
+    while(1)
+    {
+        const char *text = 0;
+        char default_text[BCTEXTLEN];
+        if(count < total_default_filters)
+            strcpy(default_text, default_filters[count]);
+        else
+            default_text[0] = 0;
+        defaults->get("FILEBOX_FILTERS", default_text, count);
+
+        if(default_text[0])
+        {
+            resources->filebox_filters.append(default_text);
+            defaults->update("FILEBOX_FILTERS", default_text, count);
+// printf("BC_WindowBase::load_defaults %d: %s count=%d\n",
+// __LINE__, default_text, count);
+        }
+        else
+            break;
+
+        count++;
+    }
 	return 0;
 }
 
@@ -4183,6 +4240,7 @@ int BC_WindowBase::save_defaults(BC_Hash *defaults)
 	defaults->update("FILEBOX_FILTER", resources->filebox_filter);
 	defaults->update("FILEBOX_SORTCOLUMN", resources->filebox_sortcolumn);
 	defaults->update("FILEBOX_SORTORDER", resources->filebox_sortorder);
+    defaults->update("FILEBOX_SHOW_PREVIEW", resources->filebox_show_preview);
 	return 0;
 }
 
@@ -4307,22 +4365,22 @@ void BC_WindowBase::restore_vm()
 int BC_WindowBase::get_event_count()
 {
 	event_lock->lock("BC_WindowBase::get_event_count");
-	int result = common_events.total;
+	int result = common_events.size();
 	event_lock->unlock();
 	return result;
 }
 
-XEvent* BC_WindowBase::get_event()
+BC_Event* BC_WindowBase::get_event()
 {
-	XEvent *result = 0;
+	BC_Event *result = 0;
 	while(!done && !result)
 	{
 		event_condition->lock("BC_WindowBase::get_event");
 		event_lock->lock("BC_WindowBase::get_event");
 
-		if(common_events.total && !done)
+		if(common_events.size() && !done)
 		{
-			result = common_events.values[0];
+			result = common_events.get(0);
 			common_events.remove_number(0);
 		}
 
@@ -4331,8 +4389,25 @@ XEvent* BC_WindowBase::get_event()
 	return result;
 }
 
-void BC_WindowBase::put_event(XEvent *event)
+void BC_WindowBase::put_event(XEvent *xevent)
 {
+// wrap it
+    BC_Event *event = new BC_Event;
+    event->xevent = xevent;
+
+	event_lock->lock("BC_WindowBase::put_event");
+	common_events.append(event);
+	event_lock->unlock();
+	event_condition->unlock();
+}
+
+void BC_WindowBase::put_event(void (*user_function)(void *), void *data)
+{
+// wrap it
+    BC_Event *event = new BC_Event;
+    event->user_function = user_function;
+    event->user_data = data;
+
 	event_lock->lock("BC_WindowBase::put_event");
 	common_events.append(event);
 	event_lock->unlock();

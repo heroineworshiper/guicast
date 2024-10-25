@@ -1,4 +1,3 @@
-
 /*
  * CINELERRA
  * Copyright (C) 1997-2021 Adam Williams <broadcast at earthling dot net>
@@ -196,7 +195,9 @@ public:
 
 // Compute suggestions for a path
 // If entries is null, just search absolute paths
-	int calculate_suggestions(ArrayList<BC_ListBoxItem*> *entries);
+// ignore_fs - don't calculate paths
+	int calculate_suggestions(ArrayList<BC_ListBoxItem*> *entries,
+        int ignore_fs = 0);
 
 // push the current state
    void update_undo();
@@ -219,7 +220,7 @@ private:
 	void draw(int flush);
 	void draw_border();
 	void draw_cursor();
-	void copy_selection(int clipboard_num);
+	void copy_selection(uint32_t clipboard_mask);
 	void paste_selection(int clipboard_num);
 	void delete_selection(int letter1, int letter2, int text_len);
 	void insert_text(char *string);
@@ -375,15 +376,22 @@ public:
 	int create_objects();
 	virtual int handle_event();
 	const char* get_text();
+    BC_PopupTextBoxText* get_textbox();
 	int get_number();
 	int get_x();
 	int get_y();
 	int get_w();
 	int get_h();
+
+// get extents of the toggle
+    static int calculate_h();
+    static int calculate_w();
+    void set_read_only(int value);
+
     void set_list_w(int value);
 	void update(const char *text);
 	void update_list(ArrayList<BC_ListBoxItem*> *data);
-	void reposition_window(int x, int y);
+	void reposition_window(int x, int y, int w = -1);
 
 	friend class BC_PopupTextBoxText;
 	friend class BC_PopupTextBoxList;
@@ -447,6 +455,7 @@ public:
 
 	int create_objects();
 	void reset();
+    void set_tooltip(const char *text);
 	virtual int handle_event();
 	const char* get_text();
 	int update(const char *value);
@@ -456,7 +465,7 @@ public:
 	int get_y();
 	int get_w();
 	int get_h();
-	void reposition_window(int x, int y);
+	void reposition_window(int x, int y, int w = -1);
 	void set_boundaries(int64_t min, int64_t max);
 	void set_boundaries(float min, float max);
 	void set_precision(int precision);
@@ -464,7 +473,11 @@ public:
     void disable();
     void enable();
     int get_enabled();
-    void set_tooltip(const char *text);
+    void set_read_only(int value);
+
+// get extents of the toggle
+    static int calculate_h();
+    static int calculate_w();
 
 	friend class BC_TumbleTextBoxText;
 	friend class BC_TumbleTextBoxTumble;

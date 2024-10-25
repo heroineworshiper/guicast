@@ -1,7 +1,6 @@
-
 /*
  * CINELERRA
- * Copyright (C) 2008 Adam Williams <broadcast at earthling dot net>
+ * Copyright (C) 2008-2024 Adam Williams <broadcast at earthling dot net>
  * 
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -203,7 +202,7 @@ char* Units::totext(char *text,
 			double seconds, 
 			int time_format, 
 			int sample_rate, 
-			float frame_rate, 
+			double frame_rate, 
 			float frames_per_foot)    // give text representation as time
 {
 	int hour, minute, second, thousandths;
@@ -229,7 +228,7 @@ char* Units::totext(char *text,
 				second, 
 				thousandths);
 			return text;
-		  break;
+		    break;
 		
 		case TIME_HMS2:
 		{
@@ -241,7 +240,7 @@ char* Units::totext(char *text,
   			sprintf(text, "%d:%02d:%02d", hour, minute, (int)second);
 			return text;
 		}
-		  break;
+		    break;
 
 		case TIME_HMS3:
 		{
@@ -253,7 +252,7 @@ char* Units::totext(char *text,
   			sprintf(text, "%02d:%02d:%02d", hour, minute, (int)second);
 			return text;
 		}
-		  break;
+		    break;
 
 		case TIME_HMSF:
 		{
@@ -265,16 +264,46 @@ char* Units::totext(char *text,
 //   			frame = (int64_t)round(frame_rate * 
 //   	 			 (float)((float)seconds - (int64_t)hour * 3600 - (int64_t)minute * 60 - second));
 //   			sprintf(text, "%01d:%02d:%02d:%02ld", hour, minute, second, frame);
-			frame = (int64_t)((double)frame_rate * 
-					seconds + 
-					0.0000001) - 
-				(int64_t)((double)frame_rate * 
-					(hour * 
-					3600 + 
-					minute * 
-					60 + 
-					second) + 
-				0.0000001);   
+// 			frame = (int64_t)((double)frame_rate * 
+// 					seconds + 
+// 					0.0001) - 
+// 				(int64_t)((double)frame_rate * 
+// 					(hour * 
+// 					3600 + 
+// 					minute * 
+// 					60 + 
+// 					second) + 
+// 				0.0001);
+
+			frame = (int64_t)(frame_rate * 
+ 					seconds + 
+ 					0.0001 - // fudge factor
+                    (frame_rate * 
+ 					(int)seconds + 0.0001) + // fudge factor 
+                    .5); // help conversion from fraction frame rates to whole frame number
+
+
+//printf("Units::totext %d seconds=%f second=%d frame=%d frame_rate=%f\n", 
+//__LINE__, seconds, (int)second, (int)frame, frame_rate);
+
+
+// rounding error
+            if(frame >= frame_rate)
+            {
+//printf("Units::totext %d frame=%d frame_rate=%f\n", __LINE__, (int)frame, frame_rate);
+                frame = 0;
+                second++;
+                if(second >= 60)
+                {
+                    second = 0;
+                    minute++;
+                    if(minute >= 60)
+                    {
+                        minute = 0;
+                        hour++;
+                    }
+                }
+            }
 			sprintf(text, "%01d:%02d:%02d:%02ld", hour, minute, second, frame);
 			return text;
 		}
@@ -312,7 +341,7 @@ char* Units::totext(char *text,
 		int64_t samples, 
 		int samplerate, 
 		int time_format, 
-		float frame_rate,
+		double frame_rate,
 		float frames_per_foot)
 {
 	return totext(text, (double)samples / samplerate, time_format, samplerate, frame_rate, frames_per_foot);
@@ -321,8 +350,21 @@ char* Units::totext(char *text,
 int64_t Units::fromtext(const char *text, 
 			int samplerate, 
 			int time_format, 
-			float frame_rate,
+			double frame_rate,
 			float frames_per_foot)
+{
+    return (int64_t)(text_to_seconds(text, 
+		samplerate, 
+		time_format, 
+		frame_rate, 
+		frames_per_foot) * samplerate);
+}
+
+double Units::text_to_seconds(const char *text, 
+	int samplerate, 
+	int time_format, 
+	double frame_rate, 
+	float frames_per_foot)
 {
 	int64_t hours, minutes, frames, total_samples, i, j;
 	int64_t feet;
@@ -332,8 +374,7 @@ int64_t Units::fromtext(const char *text,
 	switch(time_format)
 	{
 		case TIME_SECONDS:
-			seconds = atof(text);
-			return (int64_t)(seconds * samplerate);
+			return atof(text);
 			break;
 
 		case TIME_HMS:
@@ -361,8 +402,7 @@ int64_t Units::fromtext(const char *text,
 			string[j] = 0;
 			seconds = atof(string);
 
-			total_samples = (uint64_t)(((double)seconds + minutes * 60 + hours * 3600) * samplerate);
-			return total_samples;
+			return (double)seconds + minutes * 60 + hours * 3600;
 			break;
 
 		case TIME_HMSF:
@@ -397,12 +437,11 @@ int64_t Units::fromtext(const char *text,
 			string[j] = 0;
 			frames = atol(string);
 			
-			total_samples = (int64_t)(((float)frames / frame_rate + seconds + minutes*60 + hours*3600) * samplerate);
-			return total_samples;
+			return (double)frames / frame_rate + seconds + minutes * 60 + hours * 3600;
 			break;
 
 		case TIME_SAMPLES:
-			return atol(text);
+			return (double)atol(text) / samplerate;
 			break;
 		
 		case TIME_SAMPLES_HEX:
@@ -410,11 +449,11 @@ int64_t Units::fromtext(const char *text,
 			int temp;
 			sscanf(text, "%x", &temp);
 			total_samples = temp;
-			return total_samples;
+			return (double)total_samples / samplerate;
 		}
 		
 		case TIME_FRAMES:
-			return (int64_t)(atof(text) / frame_rate * samplerate);
+			return atof(text) / frame_rate;
 			break;
 		
 		case TIME_FEET_FRAMES:
@@ -433,23 +472,10 @@ int64_t Units::fromtext(const char *text,
 			while(text[i] >=48 && text[i] <= 57 && text[i] != 0 && j < 10) string[j++] = text[i++];
 			string[j] = 0;
 			frames = atol(string);
-			return (int64_t)(((float)feet * frames_per_foot + frames) / frame_rate * samplerate);
+			return ((double)feet * frames_per_foot + frames) / frame_rate;
 			break;
 	}
-	return 0;
-}
-
-double Units::text_to_seconds(const char *text, 
-				int samplerate, 
-				int time_format, 
-				float frame_rate, 
-				float frames_per_foot)
-{
-	return (double)fromtext(text, 
-		samplerate, 
-		time_format, 
-		frame_rate, 
-		frames_per_foot) / samplerate;
+    return 0;
 }
 
 
@@ -457,12 +483,12 @@ double Units::text_to_seconds(const char *text,
 
 
 
-float Units::toframes(int64_t samples, int sample_rate, float framerate) 
+float Units::toframes(int64_t samples, int sample_rate, double framerate) 
 { 
 	return (float)samples / sample_rate * framerate; 
 } // give position in frames
 
-int64_t Units::toframes_round(int64_t samples, int sample_rate, float framerate) 
+int64_t Units::toframes_round(int64_t samples, int sample_rate, double framerate) 
 {
 // used in editing
 	float result_f = (float)samples / sample_rate * framerate; 
@@ -491,7 +517,7 @@ double Units::atoframerate(const char *text)
 }
 
 
-int64_t Units::tosamples(float frames, int sample_rate, float framerate) 
+int64_t Units::tosamples(float frames, int sample_rate, double framerate) 
 { 
 	float result = (frames / framerate * sample_rate);
 	

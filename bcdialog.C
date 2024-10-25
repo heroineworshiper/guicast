@@ -1,4 +1,3 @@
-
 /*
  * CINELERRA
  * Copyright (C) 2008 Adam Williams <broadcast at earthling dot net>
@@ -32,6 +31,9 @@ BC_DialogThread::BC_DialogThread()
  : Thread(1, 0, 0)
 {
 	gui = 0;
+    keep_gui = 0;
+    async_gui = 0;
+    restart = 0;
 	startup_lock = new Condition(1, "BC_DialogThread::startup_lock");
 	window_lock = new Mutex("BC_DialogThread::window_lock");
 }
@@ -60,6 +62,21 @@ void BC_DialogThread::lock_window(const char *location)
 void BC_DialogThread::unlock_window()
 {
 	window_lock->unlock();
+}
+
+void BC_DialogThread::set_keep_gui(int value)
+{
+    keep_gui = value;
+}
+
+void BC_DialogThread::set_async_gui()
+{
+    async_gui = 1;
+}
+
+void BC_DialogThread::set_restart()
+{
+    restart = 1;
 }
 
 int BC_DialogThread::is_running()
@@ -93,18 +110,43 @@ void BC_DialogThread::start()
 
 void BC_DialogThread::run()
 {
-	gui = new_gui();
-	startup_lock->unlock();
-	int result = gui->run_window();
+// unlock startup_lock once after the window is created
+    int pass = 0;
+    do
+    {
+        restart = 0;
 
-	handle_done_event(result);
+        if(pass == 0 && async_gui) startup_lock->unlock();
+        if(!gui)
+        {
+    	    gui = new_gui();
+        }
+        else
+        {
+            gui->show_window(1);
+        }
 
-	window_lock->lock("BC_DialogThread::run");
-	delete gui;
-	gui = 0;
-	window_lock->unlock();
+	    if(pass == 0 && !async_gui) startup_lock->unlock();
+	    int result = gui->run_window();
 
-	handle_close_event(result);
+	    handle_done_event(result);
+
+	    window_lock->lock("BC_DialogThread::run");
+
+        if(!keep_gui)
+        {
+    	    delete gui;
+	        gui = 0;
+        }
+        else
+        {
+            gui->hide_window(1);
+        }
+	    window_lock->unlock();
+
+	    handle_close_event(result);
+        pass++;
+    } while(restart);
 }
 
 void BC_DialogThread::lock_gui(const char *location)

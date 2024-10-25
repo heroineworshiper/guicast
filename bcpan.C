@@ -104,9 +104,9 @@ int BC_Pan::initialize()
 	temp_channel->set_use_shm(0);
 	temp_channel->reallocate(0, 
 		-1,
-		0,
-		0,
-		0,
+		(unsigned char*)0,
+		(unsigned char*)0,
+		(unsigned char*)0,
 		get_resources()->pan_data[PAN_CHANNEL]->get_w(),
 		get_resources()->pan_data[PAN_CHANNEL]->get_h(),
 		get_resources()->pan_data[PAN_CHANNEL]->get_color_model(),
@@ -239,14 +239,14 @@ int BC_Pan::activate()
 	y -= (images[PAN_POPUP]->get_h() - get_h()) / 2;
 	if (x < 0) x = 0;
 
-	add_subwindow(popup = new BC_Popup(
+	popup = new BC_Popup(this, 
 				x, 
 				y, 
 				images[PAN_POPUP]->get_w(), 
 				images[PAN_POPUP]->get_h(), 
 				0, 
 				0, 
-				images[PAN_POPUP]));
+				images[PAN_POPUP]);
 	flush();
 	return 0;
 }

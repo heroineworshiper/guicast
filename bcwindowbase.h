@@ -1,7 +1,6 @@
-
 /*
  * CINELERRA
- * Copyright (C) 1997-2014 Adam Williams <broadcast at earthling dot net>
+ * Copyright (C) 1997-2024 Adam Williams <broadcast at earthling dot net>
  * 
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -43,7 +42,7 @@
 #include "bcbutton.inc"
 #include "bccapture.inc"
 #include "bcclipboard.inc"
-#include "bccmodels.inc"
+//#include "bccmodels.inc"
 #include "bcdisplay.inc"
 #include "bcdragwindow.inc"
 #include "bcfilebox.inc"
@@ -113,6 +112,17 @@ public:
 };
 
 
+// wrapper for x events & user functions to run in the window thread
+class BC_Event
+{
+public:
+    BC_Event();
+    virtual ~BC_Event();
+    XEvent *xevent;
+    void (*user_function)(void *);
+    void *user_data;
+};
+
 // Windows, subwindows, popupwindows inherit from this
 class BC_WindowBase
 {
@@ -155,13 +165,13 @@ public:
 	friend class BC_Tumbler;
 	friend class BC_Window;
 	friend class BC_WindowEvents;
-#ifdef X_HAVE_UTF8_STRING
-	XIM im;		/* Used to communicate with the input method (IM) server */
-	XIC ic;		/* Used for retaining the state, properties, and semantics of communication with the input method (IM) server */
-#endif
 
 // Main loop
 	int run_window();
+// Schedule a user function to run in the run_window thread.
+// Deleted by run_window
+// Window is locked before running the function.
+    void put_event(void (*user_function)(void *), void *data);
 // Terminal event dispatchers
 	virtual int close_event();
 	virtual int resize_event(int w, int h);
@@ -223,6 +233,8 @@ public:
 	void put_shader(unsigned int handle, char *title);
 
 
+// return 1 if initialization worked
+    int exists();
 	int flash(int x, int y, int w, int h, int flush = 1);
 	int flash(int flush = 1);
 	void flush();
@@ -233,14 +245,17 @@ public:
 	int get_window_lock();
 
 	BC_MenuBar* add_menubar(BC_MenuBar *menu_bar);
-// was add_popup
 	BC_WindowBase* add_subwindow(BC_WindowBase *subwindow);
 	BC_WindowBase* add_tool(BC_WindowBase *subwindow);
+// Use this to get events for the popup window.
+// Events are not propagated to the popup window.
+	BC_WindowBase* add_popup(BC_WindowBase *window);
+	void remove_popup(BC_WindowBase *window);
 
 	static BC_Resources* get_resources();
 // User must create synchronous object first
 	static BC_Synchronous* get_synchronous();
-	static BC_CModels* get_cmodels();
+//	static BC_CModels* get_cmodels();
 
 // Dimensions
 	virtual int get_w();
@@ -264,6 +279,8 @@ public:
 
 // 1 or 0 if a button is down
 	int get_button_down();
+// must clear it if the widget owning the button down is deleted
+    void clear_button_down();
 // Number of button pressed 1 - 5
 	int get_buttonpress();
 	int get_has_focus();
@@ -305,8 +322,6 @@ public:
 	BC_WindowBase* get_parent();
 // Event happened in this window
 	int is_event_win();
-// Event happened in this or a subwindow, except a popup
-    int is_event_subwin();
 	int cursor_inside();
 // Deactivate everything and activate this subwindow
 	virtual int activate();
@@ -324,8 +339,6 @@ public:
 	void set_line_dashes(int value);
 	int get_bgcolor();
 	void set_font(int font);
-// reposition the cursor
-    void reposition_cursor(int x, int y);
 // Set the cursor to a macro from cursors.h
 // Set override if the caller is enabling hourglass or hiding the cursor
 	void set_cursor(int cursor, int override /* = 0 */, int flush);
@@ -350,9 +363,16 @@ public:
 	void copy_area(int x1, int y1, int x2, int y2, int w, int h, BC_Pixmap *pixmap = 0);
 	void clear_box(int x, int y, int w, int h, BC_Pixmap *pixmap = 0);
 	void draw_box(int x, int y, int w, int h, BC_Pixmap *pixmap = 0);
-	void draw_fg_box(int x, int y, int w, int h);
+// draw a box in the current color with a checker for alpha
+    void draw_box_alpha(int x, 
+        int y, 
+        int w, 
+        int h, 
+        int a, 
+        int checker_w,
+        int checker_h,
+        BC_Pixmap *pixmap = 0);
 	void draw_circle(int x, int y, int w, int h, BC_Pixmap *pixmap = 0);
-	void draw_fg_circle(int x, int y, int w, int h);
 	void draw_arc(int x, 
 		int y, 
 		int w, 
@@ -361,7 +381,6 @@ public:
 		int angle_length,
 		BC_Pixmap *pixmap = 0);
 	void draw_disc(int x, int y, int w, int h, BC_Pixmap *pixmap = 0);
-	void draw_fg_disc(int x, int y, int w, int h);
 	void draw_text(int x, int y, const char *text, int length = -1, BC_Pixmap *pixmap = 0);
 	void draw_xft_text(int x, 
 		int y, 
@@ -377,7 +396,6 @@ public:
 	void truncate_text(char *result, const char *text, int w);
 	void draw_center_text(int x, int y, const char *text, int length = -1);
 	void draw_line(int x1, int y1, int x2, int y2, BC_Pixmap *pixmap = 0);
-	void draw_fg_line(int x1, int y1, int x2, int y2);
 	void draw_polygon(ArrayList<int> *x, ArrayList<int> *y, BC_Pixmap *pixmap = 0);
 	void fill_polygon(ArrayList<int> *x, ArrayList<int> *y, BC_Pixmap *pixmap = 0);
 	void draw_rectangle(int x, int y, int w, int h);
@@ -512,7 +530,6 @@ public:
 		int src_h = 0,
 		BC_Pixmap *pixmap = 0);
 	void draw_pixel(int x, int y, BC_Pixmap *pixmap = 0);
-	void draw_fg_pixel(int x, int y);
 // Draw a pixmap on the window
 	void draw_pixmap(BC_Pixmap *pixmap, 
 		int dest_x = 0, 
@@ -545,6 +562,18 @@ public:
 		int y, 
 		int w, 
 		int h);
+
+// bits for reader
+    int is_event_subwin();
+    void reposition_cursor(int x, int y);
+    void draw_fg_box(int x, int y, int w, int h);
+    void draw_fg_circle(int x, int y, int w, int h);
+    void draw_fg_disc(int x, int y, int w, int h);
+    void draw_fg_line(int x1, int y1, int x2, int y2);
+    void draw_fg_pixel(int x, int y);
+// get the foreground window for drawing
+    Window get_win();
+
 	void slide_left(int distance);
 	void slide_right(int distance);
 	void slide_up(int distance);
@@ -579,10 +608,7 @@ public:
 #endif
 
     BC_Bitmap* get_temp_bitmap(int w, int h, int color_model);
-// get the foreground window for drawing
-    Window get_win();
 	
-	int dump_windows(int indent);
 	int test_keypress;
   	char keys_return[KEYPRESSLEN];
 
@@ -602,6 +628,7 @@ private:
 				int hide,
 				int bg_color,
 				const char *display_name,
+				int window_type,
 				BC_Pixmap *bg_pixmap,
 				int group_it);
 
@@ -614,8 +641,7 @@ private:
 	void init_cursors();
 	int init_colors();
 	int init_window_shape();
-// was remove_popup
-    void remove_subwindow(BC_WindowBase *subwindow);
+
 
 
 	XFontStruct* query_font(const char *font_string, int size);
@@ -647,7 +673,7 @@ private:
     XFontSet get_fontset(int font);
     XFontSet get_curr_fontset(void);
     void set_fontset(int font);
-	int dispatch_event(XEvent *event);
+	int dispatch_event(BC_Event *event);
 
 	int get_key_masks(XEvent *event);
 
@@ -659,10 +685,10 @@ private:
 	int unset_all_repeaters();
 
 // Block and get event from common events.
-	XEvent* get_event();
+	BC_Event* get_event();
 // Return number of events in table.
 	int get_event_count();
-// Put event in common events.
+// Put X event in common events.  Deleted by run_window
 	void put_event(XEvent *event);
 
 // Recursive event dispatchers
@@ -703,7 +729,7 @@ private:
 // Window just above this window
 	BC_WindowBase* parent_window;
 // list of window bases in this window
-	ArrayList<BC_WindowBase*> subwindows;
+	BC_SubWindowList* subwindows;
 	ArrayList<BC_WindowBase*> popups;
 // Position of window
 	int x, y, w, h;
@@ -775,7 +801,7 @@ private:
 	int has_focus;
 
 	static BC_Resources resources;
-	static BC_CModels cmodels;
+//	static BC_CModels cmodels;
 	
 #ifndef SINGLE_THREAD
 // Array of repeaters for multiple repeating objects.
@@ -886,7 +912,7 @@ private:
 	BC_Bitmap *temp_bitmap;
 // Clipboard
 #ifndef SINGLE_THREAD
-	BC_Clipboard *clipboard;
+	static BC_Clipboard *clipboard;
 #endif
 
 #ifdef HAVE_LIBXXF86VM
@@ -895,12 +921,17 @@ private:
    XF86VidModeModeInfo orig_modeline;
 #endif
 
+#ifdef X_HAVE_UTF8_STRING
+	XIM im;		/* Used to communicate with the input method (IM) server */
+	XIC ic;		/* Used for retaining the state, properties, and semantics of communication with the input method (IM) server */
+#endif
 
 
 
 #ifndef SINGLE_THREAD
-// Common events coming from X server and repeater.
-	ArrayList<XEvent*> common_events;
+// Common events to run in the window thread
+// Sources are the X server, repeater threads, & user threads.
+	ArrayList<BC_Event*> common_events;
 // Locks for common events
 // Locking order:
 // 1) event_condition
@@ -914,6 +945,7 @@ private:
 // Lock that waits until the event handler is running
 	Condition *init_lock;
 
+	int dump_windows();
 
 
 	BC_WindowEvents *event_thread;

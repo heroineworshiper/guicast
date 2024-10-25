@@ -1,4 +1,3 @@
-
 /*
  * CINELERRA
  * Copyright (C) 2008 Adam Williams <broadcast at earthling dot net>
@@ -33,6 +32,17 @@ public:
 
 	virtual int initialize();
 private:
+};
+
+class BC_SubWindowList : public ArrayList<BC_WindowBase*>
+{
+public:
+	BC_SubWindowList();
+	~BC_SubWindowList();
+
+
+private:
+	
 };
 
 

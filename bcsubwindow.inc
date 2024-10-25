@@ -24,5 +24,6 @@
 
 
 class BC_SubWindow;
+class BC_SubWindowList;
 
 #endif

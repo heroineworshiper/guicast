@@ -1,7 +1,6 @@
-
 /*
  * CINELERRA
- * Copyright (C) 2008 Adam Williams <broadcast at earthling dot net>
+ * Copyright (C) 2008-2022 Adam Williams <broadcast at earthling dot net>
  * 
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -30,8 +29,14 @@
 #define DRAG_OFFSET_X 16
 #define DRAG_OFFSET_Y 16
 
-BC_DragWindow::BC_DragWindow(BC_Pixmap *pixmap)
- : BC_Popup(parent_window->get_abs_cursor_x(0) + DRAG_OFFSET_X,
+BC_DragWindow::BC_DragWindow(BC_WindowBase *parent_window, 
+	BC_Pixmap *pixmap /*, 
+	int icon_x, 
+	int icon_y */)
+ : BC_Popup(parent_window, 
+// 	icon_x, 
+//	icon_y,
+	parent_window->get_abs_cursor_x(0) + DRAG_OFFSET_X,
 	parent_window->get_abs_cursor_y(0) + DRAG_OFFSET_Y,
 	pixmap->get_w(),
 	pixmap->get_h(),
@@ -40,12 +45,27 @@ BC_DragWindow::BC_DragWindow(BC_Pixmap *pixmap)
 	pixmap)
 {
 	temp_frame = 0;
+//	init_x = icon_x;
+//	init_y = icon_y;
+	init_x = parent_window->get_abs_cursor_x(0) + DRAG_OFFSET_X;
+	init_y = parent_window->get_abs_cursor_y(0) + DRAG_OFFSET_Y;
+	end_x = BC_INFINITY;
+	end_y = BC_INFINITY;
+	icon_offset_x = init_x - parent_window->get_abs_cursor_x(0);
+	icon_offset_y = init_y - parent_window->get_abs_cursor_y(0);
+//printf("BC_DragWindow::BC_DragWindow 1 %d %d\n", icon_offset_x, icon_offset_y);
 	do_animation = 1;
 }
 
 
-BC_DragWindow::BC_DragWindow(VFrame *frame)
- : BC_Popup(parent_window->get_abs_cursor_x(0) + DRAG_OFFSET_X,
+BC_DragWindow::BC_DragWindow(BC_WindowBase *parent_window, 
+	VFrame *frame /*, 
+	int icon_x, 
+	int icon_y */)
+ : BC_Popup(parent_window, 
+// 	icon_x, 
+//	icon_y,
+	parent_window->get_abs_cursor_x(0) + DRAG_OFFSET_X,
 	parent_window->get_abs_cursor_y(0) + DRAG_OFFSET_Y,
 	frame->get_w(),
 	frame->get_h(),
@@ -55,24 +75,20 @@ BC_DragWindow::BC_DragWindow(VFrame *frame)
 {
 	delete temp_frame;  // created in prepare_frame inside constructor
 	temp_frame = 0;
-	do_animation = 1;
-}
-
-BC_DragWindow::~BC_DragWindow()
-{
-}
-
-
-int BC_DragWindow::initialize()
-{
+//	init_x = icon_x;
+//	init_y = icon_y;
 	init_x = parent_window->get_abs_cursor_x(0) + DRAG_OFFSET_X;
 	init_y = parent_window->get_abs_cursor_y(0) + DRAG_OFFSET_Y;
 	end_x = BC_INFINITY;
 	end_y = BC_INFINITY;
 	icon_offset_x = init_x - parent_window->get_abs_cursor_x(0);
 	icon_offset_y = init_y - parent_window->get_abs_cursor_y(0);
-    
-    return BC_Popup::initialize();
+//printf("BC_DragWindow::BC_DragWindow 1 %d %d\n", icon_offset_x, icon_offset_y);
+	do_animation = 1;
+}
+
+BC_DragWindow::~BC_DragWindow()
+{
 }
 
 int BC_DragWindow::get_init_x(BC_WindowBase *parent_window, int icon_x)
@@ -177,14 +193,16 @@ BC_Pixmap *BC_DragWindow::prepare_frame(VFrame *frame, BC_WindowBase *parent_win
 					BC_RGBA8888,
 					-1); 
 
-		BC_WindowBase::get_cmodels()->transfer(temp_frame->get_rows(), 
+		cmodel_transfer(temp_frame->get_rows(), 
 			frame->get_rows(),
-			0,
-			0,
-			0,
-			0,
-			0,
-			0,
+	        0, // out_y_plane, /* Leave NULL if non existent */
+	        0, // out_u_plane,
+	        0, // out_v_plane,
+	        0, // out_a_plane,
+	        0, // in_y_plane, /* Leave NULL if non existent */
+	        0, // in_u_plane,
+	        0, // in_v_plane,
+	        0, // in_a_plane,
 			0, 
 			0, 
 			frame->get_w(), 

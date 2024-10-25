@@ -1,7 +1,6 @@
-
 /*
  * CINELERRA
- * Copyright (C) 2008 Adam Williams <broadcast at earthling dot net>
+ * Copyright (C) 2008-2024 Adam Williams <broadcast at earthling dot net>
  * 
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -32,8 +31,7 @@
 class BC_Toggle : public BC_SubWindow
 {
 public:
-	BC_Toggle(int x, 
-        int y, 
+	BC_Toggle(int x, int y, 
 		VFrame **data,
 		int value, 
 		const char *caption = "",
@@ -142,11 +140,18 @@ public:
 		const char *caption = "", 
 		int font = MEDIUMFONT,
 		int color = -1);
+	BC_CheckBox(int x, 
+		int y, 
+		bool *value, 
+		const char *caption = "", 
+		int font = MEDIUMFONT,
+		int color = -1);
 	virtual int handle_event();
 	static int calculate_h(BC_WindowBase *gui);
 
 
 	int *value;
+    bool *value_b;
 };
 
 class BC_Label : public BC_Toggle

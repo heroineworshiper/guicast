@@ -1,7 +1,6 @@
-
 /*
  * CINELERRA
- * Copyright (C) 2008 Adam Williams <broadcast at earthling dot net>
+ * Copyright (C) 2008-2024 Adam Williams <broadcast at earthling dot net>
  * 
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -28,12 +27,13 @@
 
 
 
-
+#include "arraylist.h"
 #include "bcdisplayinfo.inc"
 #include "bcfilebox.h"
 #include "bcresources.inc"
 #include "bcsignals.inc"
 #include "bcsynchronous.inc"
+#include "bctheme.inc"
 #include "bcwindowbase.inc"
 #include "vframe.inc"
 
@@ -92,6 +92,9 @@ public:
 
 
 	static int initialized;
+// TODO: all the bits should come from the theme object
+// & should only be allocated if there's no user theme.
+    static BC_Theme *theme;
 
 // the DPI of the monitor after user override
 	static int dpi;
@@ -110,8 +113,8 @@ public:
 	int bg_shadow2;
 	int bg_light1;
 	int bg_light2;
-	int default_text_color;
-	int disabled_text_color;
+	static int default_text_color;
+	static int disabled_text_color;
 
 
 // beveled box colors
@@ -195,14 +198,15 @@ public:
 // Buttons
 	VFrame **ok_images;
 	VFrame **cancel_images;
-	VFrame **filebox_text_images;
-	VFrame **filebox_icons_images;
+//	VFrame **filebox_text_images;
+//	VFrame **filebox_icons_images;
 	VFrame **filebox_updir_images;
 	VFrame **filebox_newfolder_images;
 	VFrame **filebox_rename_images;
 	VFrame **filebox_descend_images;
 	VFrame **filebox_delete_images;
 	VFrame **filebox_reload_images;
+	VFrame **filebox_preview_images;
 
 // Generic button images
 	VFrame **generic_button_images;
@@ -284,13 +288,14 @@ public:
 // Motion required to start a drag
 	int drag_radius;
 
-// Filebox
+// Filebox settings
 	static suffix_to_type_t suffix_to_type[TOTAL_SUFFIXES];
 	VFrame **type_to_icon;
 // Display mode for fileboxes
 	int filebox_mode;
 // Filter currently used in filebox
 	char filebox_filter[BCTEXTLEN];
+    ArrayList<string> filebox_filters;
 // History of submitted files
 	filebox_history_t filebox_history[FILEBOX_HISTORY_SIZE];
 // filebox size
@@ -311,6 +316,8 @@ public:
 	int dirbox_margin;
 	int directory_color;
 	int file_color;
+    int filebox_preview_w;
+    int filebox_show_preview;
 
 
 // fixed fonts
@@ -363,14 +370,6 @@ public:
 	static Mutex *xft_lock;
 
 private:
-// TODO: move all the graphics from BCResources to a default BCTheme
-// composite a button out of its parts
-    VFrame** new_button(VFrame *overlay, 
-	    VFrame *up,
-	    VFrame *hi,
-	    VFrame *dn);
-
-
 // Test for availability of shared memory pixmaps
 	int init_shm(BC_WindowBase *window);
 	void init_sizes(BC_WindowBase *window);

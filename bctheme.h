@@ -1,7 +1,6 @@
-
 /*
  * CINELERRA
- * Copyright (C) 2008 Adam Williams <broadcast at earthling dot net>
+ * Copyright (C) 2008-2024 Adam Williams <broadcast at earthling dot net>
  * 
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -27,6 +26,8 @@
 #include "bcwindowbase.inc"
 #include "vframe.inc"
 #include <stdarg.h>
+#include <string>
+#include <map>
 
 class BC_ThemeSet;
 
@@ -93,20 +94,19 @@ public:
 	VFrame* get_image(const char *title, int use_default = 1);
 	VFrame** get_image_set(const char *title, int use_default = 1);
 	BC_ThemeSet* get_image_set_object(const char *title);
+// overwrite or create a new table entry.  Handles deleting the previous object
+    void set_image_set(const char *title, BC_ThemeSet *image_set);
 
 // Loads compressed data into temporary
 	unsigned char* get_image_data(const char *title);
+	void overlay(VFrame *dst, VFrame *src, int in_x1 = -1, int in_x2 = -1, int shift = 0);
 
-// Verify all images have been used after initialization.
-	void check_used();
-
-// composite buttons
-	static void overlay(VFrame *dst, VFrame *src, int in_x1 = -1, int in_x2 = -1, int shift = 0);
 
 
 
 	void dump();
 	BC_Resources* get_resources();
+	int widget_border;
 
 private:
 	void init_contents();
@@ -115,18 +115,15 @@ private:
 
 // Decompressed image storage.
 // Sets of images.
-	ArrayList<BC_ThemeSet*> image_sets;
+	std::map<std::string, BC_ThemeSet*> image_sets;
 	char path[BCTEXTLEN];
 	char default_path[BCTEXTLEN];
 
-// Compressed images are loaded in here.
-	char *data_ptr;
-	char *contents_ptr;
-	ArrayList<char*> contents;
-	ArrayList<unsigned char*> pointers;
-	ArrayList<int> used;
-	char *last_image;
-	unsigned char *last_pointer;
+// Individial compressed images
+	std::map<std::string, uint8_t*> images;
+// optimize search for the last image
+	const char *last_image;
+	uint8_t *last_pointer;
 };
 
 class BC_ThemeSet
